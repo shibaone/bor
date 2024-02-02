@@ -1,82 +1,125 @@
-# Bor Overview
-Bor is the Official Golang implementation of the Polygon PoS blockchain. It is a fork of [geth](https://github.com/ethereum/go-ethereum) and is EVM compatible (upto London fork).
+# Bor fhEVM
 
-[![API Reference](
-https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/68747470733a2f2f676f646f632e6f72672f6769746875622e636f6d2f676f6c616e672f6764646f3f7374617475732e737667
-)](https://pkg.go.dev/github.com/maticnetwork/bor)
-[![Go Report Card](https://goreportcard.com/badge/github.com/maticnetwork/bor)](https://goreportcard.com/report/github.com/maticnetwork/bor)
-![MIT License](https://img.shields.io/github/license/maticnetwork/bor)
-[![Discord](https://img.shields.io/discord/714888181740339261?color=1C1CE1&label=Polygon%20%7C%20Discord%20%F0%9F%91%8B%20&style=flat-square)](https://discord.com/invite/0xPolygonDevs)
-[![Twitter Follow](https://img.shields.io/twitter/follow/0xPolygon.svg?style=social)](https://twitter.com/0xPolygon)
+This is a fork of [Bor](https://github.com/maticnetwork/bor) that integrates the fhEVM. Refer to the original README for more information.
 
-### Installing bor using packaging
+### Deploying a Polygon DevNet with 
 
-The easiest way to get started with bor is to install the packages using the command below. Refer to the [releases](https://github.com/maticnetwork/bor/releases) section to find the latest stable version of bor.
-    
-    curl -L https://raw.githubusercontent.com/maticnetwork/install/main/bor.sh | bash -s -- v0.4.0 <network> <node_type>
+> [!NOTE]
+> This was tested on Ubuntu 22.04.3 LTS on AWS
 
-The network accepts `mainnet` or `mumbai` and the node type accepts `validator` or `sentry` or `archive`. The installation script does the following things:
-- Create a new user named `bor`.
-- Install the bor binary at `/usr/bin/bor`.
-- Dump the suitable config file (based on the network and node type provided) at `/var/lib/bor` and uses it as the home dir.
-- Create a systemd service named `bor` at `/lib/systemd/system/bor.service` which starts bor using the config file as `bor` user.
+The following steps will deploy a full stack that runs a Polygon blockchain that support the fhEVM. The following containers will be deployed:
+- 1 ganache container representing the root chain
+- 3 heimdall containers (and 3 rabbitmq containers for communication AFAICT)
+- 3 bor containers
+- 1 kms container
 
-The releases supports both the networks i.e. Polygon Mainnet and Mumbai (Testnet) unless explicitly specified. Before the stable release for mainnet, pre-releases will be available marked with `beta` tag for deploying on Mumbai (testnet). On sufficient testing, stable release for mainnet will be announced with a forum post.
 
-### Building from source
+Next we will detail steps to endup with the stack described above
 
-- Install Go (version 1.19 or later) and a C compiler.
-- Clone the repository and build the binary using the following commands:
-    ```shell
-    make bor
-    ```
-- Start bor using the ideal config files for validator and sentry provided in the `packaging` folder.
-    ```shell
-    ./build/bin/bor server --config ./packaging/templates/mainnet-v1/sentry/sentry/bor/config.toml
-    ```
-- To build full set of utilities, run:
-    ```shell
-    make all
-    ```
-- Run unit and integration tests
-    ```shell
-    make test && make test-integration
-    ```
+##### Cloning Repositories
 
-#### Using the new cli
+Clone `bor` (this repo) and `matic-cli` next to each other (this is important as all the scripts rely on this). You also need to checkout a specific commit for `matic-cli`
+```bash
+$ git clone https://github.com/zama-ai/bor
+$ git clone https://github.com/maticnetwork/matic-cli
+$ cd matic-cli && git checkout af71f6d55fd5bbfb301f88496c72a5bf8a394179
+```
 
-Post `v0.3.0` release, bor uses a new command line interface (cli). The new-cli (located at `internal/cli`) has been built with keeping the flag usage similar to old-cli (located at `cmd/geth`) with a few notable changes. Please refer to [docs](./docs) section for flag usage guide and example.
+##### Install dependencies
 
-### Documentation
+This will install required dependencies
+```bash
+$ cd ../bor
+# Working Directory: bor
+$ sh 1-install_deps.sh
+```
 
-- The official documentation for the Polygon PoS chain can be found [here](https://wiki.polygon.technology/docs/pos/getting-started/). It contains all the conceptual and architectural details of the chain along with operational guide for users running the nodes.
-- New release announcements and discussions can be found on our [forum page](https://forum.polygon.technology/).
-- Polygon improvement proposals can be found [here](https://github.com/maticnetwork/Polygon-Improvement-Proposals/)
+##### Generate keys
 
-### Contribution guidelines
+Generate keys under `bor/keys` (this will be copied into the bor docker image)
+```bash
+$ cd keys
+# Working Directory: bor/keys
+$ docker run -v $PWD:/usr/local/app ghcr.io/zama-ai/fhevm-tfhe-cli:v0.2.3 fhevm-tfhe-cli generate-keys -d .
+```
 
-Thank you for considering helping out with the source code! We welcome contributions from anyone on the internet, and are grateful for even the smallest of fixes! If you'd like to contribute to bor, please fork, fix, commit and send a pull request for the maintainers to review and merge into the main code base. 
+Setup the `cks` into the kms and leave the others there.
+```bash
+$ cd ..
+# Working Directory: bor
+$ mv keys/cks kms-keys/cks.bin
+```
 
-From the outset we defined some guidelines to ensure new contributions only ever enhance the project:
+##### Setup Node
 
-* Quality: Code in the Polygon project should meet the style guidelines, with sufficient test-cases, descriptive commit messages, evidence that the contribution does not break any compatibility commitments or cause adverse feature interactions, and evidence of high-quality peer-review. Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting) guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
-* Testing: Please ensure that the updated code passes all the tests locally before submitting a pull request. In order to run unit tests, run `make test` and to run integration tests, run `make test-integration`.
-* Size: The Polygon project’s culture is one of small pull-requests, regularly submitted. The larger a pull-request, the more likely it is that you will be asked to resubmit as a series of self-contained and individually reviewable smaller PRs.
-* Maintainability: If the feature will require ongoing maintenance (e.g. support for a particular brand of database), we may ask you to accept responsibility for maintaining this feature
-* Pull requests need to be based on and opened against the `develop` branch.
-* PR title should be prefixed with package(s) they modify.
-  * E.g. "eth, rpc: make trace configs optional"
+This will setup the correct version of Node
+```bash
+# Working Directory: bor
+$ sh 2-setup_node.sh
+```
 
-## License
+##### Bootstrap devnet
 
-The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
-[GNU Lesser General Public License v3.0](https://www.gnu.org/licenses/lgpl-3.0.en.html),
-also included in our repository in the `COPYING.LESSER` file.
+This will generate files for the devnet under `matic-cli/devnet/devnet`. At this point you can update the genesis file to make custom changes
 
-The go-ethereum binaries (i.e. all code inside of the `cmd` directory) are licensed under the
-[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also
-included in our repository in the `COPYING` file.
+```bash
+# Working Directory: bor
+$ sh 3-bootstrap_devnet.sh
+```
 
-## Join our Discord server
+##### Setup Devnet
 
-Join Polygon community  – share your ideas or just say hi over [on Discord](https://discord.com/invite/0xPolygonDevs).
+The original `docker-compose` file (under matic-cli/devnet) doesn't include a kms container, so make sure to add a service named `kms`  (bor will try to connect to kms:50051 over the docker bridge network, so use the correct names). You should also change the path to the keys
+
+```yaml
+services:
+  kms:
+    image: "ghcr.io/zama-ai/kms:v0.1.3"
+    container_name: kms
+    networks:
+      - devnet-network
+    # Update with your own full path to bor/kms-keys
+    volumes:
+      - /home/ubuntu/bor/kms-keys/:/usr/src/kms-server/temp/:ro
+```
+
+Some values need to be changed in the genesis files of the 3 bor nodes `matic-cli/devnet/devnet/node<i>/bor/genesis.json`:
+- set `period` to `7` seconds
+- set `producerDelay` to `7` seconds
+- init some accounts with funds by adding them under `"alloc"`: this is useful if you are willing to run fhevm tests later
+
+```bash
+# Working Directory: bor
+$ cat <<< $(jq '.config.bor.period[]=7 | .config.bor.producerDelay[]=7' ../matic-cli/devnet/devnet/node0/bor/genesis.json) > ../matic-cli/devnet/devnet/node0/bor/genesis.json
+$ cat <<< $(jq '.config.bor.period[]=7 | .config.bor.producerDelay[]=7' ../matic-cli/devnet/devnet/node1/bor/genesis.json) > ../matic-cli/devnet/devnet/node1/bor/genesis.json
+$ cat <<< $(jq '.config.bor.period[]=7 | .config.bor.producerDelay[]=7' ../matic-cli/devnet/devnet/node2/bor/genesis.json) > ../matic-cli/devnet/devnet/node2/bor/genesis.json
+```
+
+##### Start devnet
+
+This will start all the containers for the devnet.
+
+```bash
+# Working Directory: bor
+$ sh 4-start_devnet.sh
+```
+
+##### Test deployment
+
+You can use fhevm tests to make sure encrypted smart contracts are working
+
+But if you want to test the whole Polygon stack, you can run the following script
+```bash
+# Working Directory: bor
+$ sh 5-test_deployment.sh
+```
+
+
+### Cleaning
+
+When done with the devnet, you can shut it down by following these steps:
+
+- Remove the entire devnet directory that was created during bootstrap `sudo rm -rf matic-cli/devnet`
+- Stopping all the containers `docker compose down` (from `matic-cli/devnet`)
+- Delete bor and heimdall images
+- Think about pruning containers, networks, and volumes

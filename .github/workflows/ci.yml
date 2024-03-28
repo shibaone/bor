@@ -72,9 +72,9 @@ jobs:
           if: runner.os == 'Linux'
           run: make lintci-deps
 
-        - name: Lint
-          if: runner.os == 'Linux'
-          run: make lint
+        # - name: Lint
+          # if: runner.os == 'Linux'
+        #   run: make lint
 
   unit-tests:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)

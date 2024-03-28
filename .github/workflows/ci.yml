@@ -5,7 +5,7 @@ on:
       - "master"
       - "qa"
       - "develop"
-      
+
   pull_request:
     branches:
       - "**"

@@ -1058,7 +1058,6 @@ func (t *freezerTable) Fill(number uint64) error {
 		for t.items.Load() < number {
 			if err := b.Append(t.items.Load(), nil); err != nil {
 				log.Error("Failed to fill data into freezer", "name", t.name, "items", t.items.Load(), "number", number, "err", err)
-
 				return err
 			}
 		}

@@ -193,7 +193,7 @@ jobs:
           run: |
             cd bor
             git submodule update --init --recursive --force
-            git fetch --no-tags --prune --depth=1 origin +refs/heads/v1.1.0-bone-candidate:refs/remotes/origin/v1.1.0-bone-candidate
+            git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
         - uses: actions/setup-go@v3
           with:

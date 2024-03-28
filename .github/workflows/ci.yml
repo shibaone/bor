@@ -232,6 +232,11 @@ jobs:
             mkdir devnet
             cd devnet
             ../bin/matic-cli setup devnet -c ../../bor/.github/matic-cli-config.yml
+        
+        - name: List Directory
+          run: |
+              # List all folders in the current directory
+              ls -d */
 
         - name: Launch devnet
           run: |

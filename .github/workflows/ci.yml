@@ -228,8 +228,14 @@ jobs:
         - name: Bootstrap devnet
           run: |
             cd matic-cli
-            ls -d */
+            ls -la */
             npm install --prefer-offline --no-audit --progress=false
+            cd bin
+            ls -la
+            cd ../bor
+            ls -la
+            cd ../bor/.github/
+            ls -la
             mkdir devnet
             cd devnet
             ../bin/matic-cli setup devnet -c ../../bor/.github/matic-cli-config.yml

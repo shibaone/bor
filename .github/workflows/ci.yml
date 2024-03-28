@@ -5,6 +5,7 @@ on:
       - "master"
       - "qa"
       - "develop"
+      - "v1.1.0-bone-candidate"
   pull_request:
     branches:
       - "**"
@@ -25,7 +26,7 @@ jobs:
         - uses: actions/checkout@v3
         - run: |
             git submodule update --init --recursive --force
-            git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
+            git fetch --no-tags --prune --depth=1 origin +refs/heads/v1.1.0-bone-candidate:refs/remotes/origin/v1.1.0-bone-candidate
 
         - uses: actions/setup-go@v3
           with:
@@ -57,7 +58,7 @@ jobs:
         - uses: actions/checkout@v3
         - run: |
             git submodule update --init --recursive --force
-            git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
+            git fetch --no-tags --prune --depth=1 origin +refs/heads/v1.1.0-bone-candidate:refs/remotes/origin/v1.1.0-bone-candidate
 
         - uses: actions/setup-go@v3
           with:

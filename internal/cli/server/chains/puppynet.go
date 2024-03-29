@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var sepoliapuppynetTestnet = &Chain{
+var puppynet = &Chain{
 	Hash:      common.HexToHash("0x5be2e21ae365a45dc256f34acb11953a5dca432730d325f0d084775be8dfcd0f"),
 	NetworkId: 157,
 	Genesis: &core.Genesis{
@@ -69,7 +69,7 @@ var sepoliapuppynetTestnet = &Chain{
 		Difficulty: big.NewInt(1),
 		Mixhash:    common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 		Coinbase:   common.HexToAddress("0x0000000000000000000000000000000000000000"),
-		Alloc:      readPrealloc("allocs/sepoliapuppynet.json"),
+		Alloc:      readPrealloc("allocs/puppynet.json"),
 	},
 	Bootnodes: []string{
 		"enode://30da2a73104d66f4f8a8af2bf73e1574c703df277de79fac909743cccfab8f93bcf0d4149bdedd26221400b232da52ff6a5cb22146241f7a62b70267048a8c52@3.84.194.166:30303",

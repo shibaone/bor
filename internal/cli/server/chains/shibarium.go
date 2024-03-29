@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var shibmainnetBor = &Chain{
+var shibarium = &Chain{
 	Hash:      common.HexToHash("0x80c9851317f242906f0d5d42038029fbdbe7df64e700bdc8b8eaabcc349969f4"),
 	NetworkId: 109,
 	Genesis: &core.Genesis{
@@ -64,7 +64,7 @@ var shibmainnetBor = &Chain{
 		Difficulty: big.NewInt(1),
 		Mixhash:    common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 		Coinbase:   common.HexToAddress("0x0000000000000000000000000000000000000000"),
-		Alloc:      readPrealloc("allocs/shibmainnet.json"),
+		Alloc:      readPrealloc("allocs/shibarium.json"),
 	},
 	Bootnodes: []string{
 		"enode://f5fdf04f2f7dfdd8522fcd6418b61cd8307b3734348b8af531d0d3fbe3d047ecc00e071e8fc48e4668a345b1f0c4cf7132f0967b592a3d87a96ddc104b8744f7@52.6.145.99:30303",

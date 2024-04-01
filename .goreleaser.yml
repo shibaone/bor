@@ -144,8 +144,8 @@ snapshot:
 #     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
 #     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
 
-announce:
-  slack:
-    enabled: true
-    # The name of the channel that the user selected as a destination for webhook messages.
-    channel: '#code-releases'
+# announce:
+#   slack:
+#     enabled: true
+#     # The name of the channel that the user selected as a destination for webhook messages.
+#     channel: '#code-releases'

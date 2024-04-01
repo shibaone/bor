@@ -953,4 +953,4 @@ jobs:
           prerelease: true
           files: |
             packaging/deb/bor**.deb
-            binary/bo**
+            build/bin/bo**

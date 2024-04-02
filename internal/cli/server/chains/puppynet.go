@@ -27,7 +27,7 @@ var puppynet = &Chain{
 			MuirGlacierBlock:    big.NewInt(0),
 			BerlinBlock:         big.NewInt(0),
 			LondonBlock:         big.NewInt(0),
-			ShanghaiBlock:       big.NewInt(1881600), // Decide
+			ShanghaiBlock:       big.NewInt(1881600),
 			Bor: &params.BorConfig{
 				JaipurBlock:           big.NewInt(0),
 				DelhiBlock:            big.NewInt(1881472),

@@ -69,7 +69,7 @@ builds:
       -s -w -extldflags "-static"
 
 nfpms:
-  - vendor: public.ecr.aws/c0g9b1k8
+  - vendor: 0xShibarium
     homepage: https://shibarium.shib.io/
     maintainer: Shibarium Team <enquiries@shib.io>
     description: Shibarium Blockchain

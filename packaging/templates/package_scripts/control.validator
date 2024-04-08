@@ -2,7 +2,7 @@ Source: bor-profile
 Version: 1.1.0-bone-beta-3
 Section: develop
 Priority: standard
-Maintainer: Polygon <release-team@polygon.technology>
+Maintainer: Shibarium <team@shibariumtech.com>
 Build-Depends: debhelper-compat (= 13)
 Package: bor-profile
 Rules-Requires-Root: yes

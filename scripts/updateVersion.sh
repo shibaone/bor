@@ -52,7 +52,7 @@ echo ""
 echo "New version is: $version"
 
 # update version in all the 6 templates
-replace="Version: "$version
+replace="Version: $version"
 fileArray=(
     "${DIR}/../packaging/templates/package_scripts/control"
     "${DIR}/../packaging/templates/package_scripts/control.arm64"
@@ -61,19 +61,25 @@ fileArray=(
     "${DIR}/../packaging/templates/package_scripts/control.validator"
     "${DIR}/../packaging/templates/package_scripts/control.validator.arm64"
 )
-for file in ${fileArray[@]}; do
-    # get the line starting with `Version` in the control file and store it in the $temp variable
-    temp=$(grep "^Version.*" $file)
-    sed -i '' "s%$temp%$replace%" $file
+for file in "${fileArray[@]}"; do
+    if [ -f "$file" ]; then
+        sed -i "s#^Version:.*#$replace#" "$file"
+    else
+        echo "File not found: $file"
+    fi
 done
 
-# update version in  ../params/version.go
+# update version in ../params/version.go
 versionFile="${DIR}/../params/version.go"
-sed -i '' "s% = .*// Major% = $VersionMajor // Major%g" $versionFile
-sed -i '' "s% = .*// Minor% = $VersionMinor // Minor%g" $versionFile
-sed -i '' "s% = .*// Patch% = $VersionPatch // Patch%g" $versionFile
-sed -i '' "s% = .*// Version metadata% = \"$VersionMeta\" // Version metadata%g" $versionFile
-gofmt -w $versionFile
+if [ -f "$versionFile" ]; then
+    sed -i "s# = .*// Major# = $VersionMajor // Major#g" "$versionFile"
+    sed -i "s# = .*// Minor# = $VersionMinor // Minor#g" "$versionFile"
+    sed -i "s# = .*// Patch# = $VersionPatch // Patch#g" "$versionFile"
+    sed -i "s# = .*// Version metadata# = \"$VersionMeta\" // Version metadata#g" "$versionFile"
+    gofmt -w "$versionFile"
+else
+    echo "Version file not found: $versionFile"
+fi
 
 echo ""
 echo "Updating Version Done"

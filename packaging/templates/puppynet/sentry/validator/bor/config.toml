@@ -25,7 +25,7 @@ syncmode = "full"
     # debug = true
 
 [p2p]
-    maxpeers = 1
+    maxpeers = 20
     port = 30303
     nodiscover = true
     # maxpendpeers = 50
@@ -65,7 +65,7 @@ syncmode = "full"
 [miner]
     mine = true
     gaslimit = 20000000
-    # gasprice = "1000000000"
+    # gasprice = "30000000000"
     # etherbase = ""
     # extradata = ""
     # recommit = "2m5s"
@@ -121,12 +121,12 @@ syncmode = "full"
     # maxheaderhistory = 1024
     # maxblockhistory = 1024
     # maxprice = "5000000000000"
-    # ignoreprice = "2"
+    # ignoreprice = "30000000000"
 
 [telemetry]
     metrics = true
     # expensive = false
-    # prometheus-addr = ""
+    prometheus-addr = "0.0.0.0:7071"
     # opencollector-endpoint = ""
     # [telemetry.influx]
         # influxdb = false
@@ -141,7 +141,7 @@ syncmode = "full"
     # [telemetry.influx.tags]
 
 # [cache]
-    # cache = 1024
+    # cache = 4096
     # gc = 25
     # snapshot = 10
     # database = 50
@@ -169,8 +169,9 @@ syncmode = "full"
     # period = 0
     # gaslimit = 11500000
 
-#   pprof = false
-#   port = 6060
-#   addr = "127.0.0.1"
-#   memprofilerate = 524288
-#   blockprofilerate = 0
+# [pprof]
+    # pprof = false
+    # port = 6060
+    # addr = "127.0.0.1"
+    # memprofilerate = 524288
+    # blockprofilerate = 0

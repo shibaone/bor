@@ -65,7 +65,7 @@ syncmode = "full"
 [miner]
     mine = true
     gaslimit = 20000000
-    # gasprice = "1000000000"
+    # gasprice = "30000000000"
     # etherbase = ""
     # extradata = ""
     # recommit = "2m5s"
@@ -116,17 +116,17 @@ syncmode = "full"
         # idle = "2m0s"
 
 # [gpo]
-#     blocks = 20
-#     percentile = 60
-#     maxheaderhistory = 1024
-#     maxblockhistory = 1024
-#     maxprice = "5000000000000"
-#     ignoreprice = "2"
+    # blocks = 20
+    # percentile = 60
+    # maxheaderhistory = 1024
+    # maxblockhistory = 1024
+    # maxprice = "5000000000000"
+    # ignoreprice = "30000000000"
 
 [telemetry]
     metrics = true
     # expensive = false
-    # prometheus-addr = ""
+    prometheus-addr = "0.0.0.0:7071"
     # opencollector-endpoint = ""
     # [telemetry.influx]
         # influxdb = false
@@ -141,18 +141,18 @@ syncmode = "full"
     # [telemetry.influx.tags]
 
 # [cache]
-#     cache = 1024
-#     gc = 25
-#     snapshot = 10
-#     database = 50
-#     trie = 15
-#     journal = "triecache"
-#     rejournal = "1h0m0s"
-#     noprefetch = false
-#     preimages = false
-#     txlookuplimit = 2350000
-#     timeout = "1h0m0s"
-#     fdlimit = 0
+    # cache = 4096
+    # gc = 25
+    # snapshot = 10
+    # database = 50
+    # trie = 15
+    # journal = "triecache"
+    # rejournal = "1h0m0s"
+    # noprefetch = false
+    # preimages = false
+    # txlookuplimit = 2350000
+    # timeout = "1h0m0s"
+    # fdlimit = 0
 
 [accounts]
     allow-insecure-unlock = true
@@ -170,8 +170,8 @@ syncmode = "full"
     # gaslimit = 11500000
 
 # [pprof]
-#   pprof = false
-#   port = 6060
-#   addr = "127.0.0.1"
-#   memprofilerate = 524288
-#   blockprofilerate = 0
+    # pprof = false
+    # port = 6060
+    # addr = "127.0.0.1"
+    # memprofilerate = 524288
+    # blockprofilerate = 0

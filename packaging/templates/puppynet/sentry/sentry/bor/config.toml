@@ -23,7 +23,7 @@ syncmode = "full"
     # debug = true
 
 [p2p]
-    maxpeers = 50
+    maxpeers = 200
     port = 30303
     # maxpendpeers = 50
     # bind = "0.0.0.0"
@@ -62,7 +62,7 @@ syncmode = "full"
 
 [miner]
     gaslimit = 20000000
-    # gasprice = "1000000000"
+    # gasprice = "30000000000"
     # mine = false
     # etherbase = ""
     # extradata = ""
@@ -119,7 +119,7 @@ syncmode = "full"
     # maxheaderhistory = 1024
     # maxblockhistory = 1024
     # maxprice = "5000000000000"
-    # ignoreprice = "2"
+    # ignoreprice = "30000000000"
 
 [telemetry]
     metrics = true
@@ -139,7 +139,7 @@ syncmode = "full"
     # [telemetry.influx.tags]
 
 # [cache]
-    # cache = 1024
+    # cache = 4096
     # gc = 25
     # snapshot = 10
     # database = 50
@@ -168,8 +168,8 @@ syncmode = "full"
     # gaslimit = 11500000
 
 # [pprof]
-#   pprof = false
-#   port = 6060
-#   addr = "127.0.0.1"
-#   memprofilerate = 524288
-#   blockprofilerate = 0
+    # pprof = false
+    # port = 6060
+    # addr = "127.0.0.1"
+    # memprofilerate = 524288
+    # blockprofilerate = 0

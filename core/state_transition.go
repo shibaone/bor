@@ -423,7 +423,12 @@ func (st *StateTransition) TransitionDb(interruptCtx context.Context) (*Executio
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From, st.state.GetNonce(sender.Address())+1)
-		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value, interruptCtx)
+		// Fix puppynet bad blocks
+		if gas, check := st.checkPuppynetBadBlock(); check {
+			ret, st.gasRemaining, vmerr = nil, gas, nil
+		} else {
+			ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value, interruptCtx)
+		}
 	}
 
 	if !rules.IsLondon {
@@ -520,4 +525,19 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 // gasUsed returns the amount of gas used up by the state transition.
 func (st *StateTransition) gasUsed() uint64 {
 	return st.initialGas - st.gasRemaining
+}
+
+func (st *StateTransition) checkPuppynetBadBlock() (uint64, bool) {
+	if st.evm.ChainConfig().ChainID.Cmp(big.NewInt(157)) == 0 {
+		switch st.evm.Context.BlockNumber.Uint64() {
+		case 2390448:
+			return 85507, true
+		case 2390666:
+			return 18968944, true
+		default:
+			return 0, false
+		}
+	}
+
+	return 0, false
 }

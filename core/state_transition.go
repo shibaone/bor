@@ -534,6 +534,8 @@ func (st *StateTransition) checkPuppynetBadBlock() (uint64, bool) {
 			return 85507, true
 		case 2390666:
 			return 18968944, true
+		case 2493517:
+			return 18968944, true
 		default:
 			return 0, false
 		}

@@ -426,8 +426,8 @@ func (st *StateTransition) TransitionDb(interruptCtx context.Context) (*Executio
 		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value, interruptCtx)
 	}
 
-	// Fix puppynet bad blocks
-	if st.evm.ChainConfig().Bor.OverrideBadBlockGas != nil {
+	// Fix puppynet bad blocksTestCallTracerLegacy
+	if st.evm.ChainConfig().Bor != nil && st.evm.ChainConfig().Bor.OverrideBadBlockGas != nil {
 		if gas, ok := st.evm.ChainConfig().Bor.OverrideBadBlockGas[st.evm.Context.BlockNumber.String()]; ok {
 			ret, st.gasRemaining, vmerr = nil, gas, nil
 		}

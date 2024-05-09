@@ -50,6 +50,11 @@ var puppynet = &Chain{
 				},
 				ValidatorContract:     "0x0000000000000000000000000000000000001000",
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
+				OverrideBadBlockGas: map[string]uint64{
+					"2390448": 85507,
+					"2390666": 18968944,
+					"2493517": 18968944,
+				},
 				BurntContract: map[string]string{
 					"0":       "0x8B066912dCDA9c9001A84b28F1aBD06e9E19114B",
 					"586000":  "0x0335c046f8317C0FAa8f76C77D5d1Da98a976181",

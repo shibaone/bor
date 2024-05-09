@@ -701,6 +701,7 @@ type BorConfig struct {
 	ValidatorContract          string                 `json:"validatorContract"`        // Validator set contract
 	StateReceiverContract      string                 `json:"stateReceiverContract"`    // State receiver contract
 	OverrideStateSyncRecords   map[string]int         `json:"overrideStateSyncRecords"` // override state records count
+	OverrideBadBlockGas        map[string]uint64      `json:"overrideBadBlockGas"`      // override bad block gas limit
 	BlockAlloc                 map[string]interface{} `json:"blockAlloc"`
 	BurntContract              map[string]string      `json:"burntContract"`              // governance contract where the token will be sent to and burnt in london fork
 	JaipurBlock                *big.Int               `json:"jaipurBlock"`                // Jaipur switch block (nil = no fork, 0 = already on jaipur)

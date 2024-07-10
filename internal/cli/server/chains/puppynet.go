@@ -59,6 +59,7 @@ var puppynet = &Chain{
 					"0":       "0x8B066912dCDA9c9001A84b28F1aBD06e9E19114B",
 					"586000":  "0x0335c046f8317C0FAa8f76C77D5d1Da98a976181",
 					"1993000": "0x18b3f03CEd0Bd7d01b1Ee61dEB582a6e19bE906F",
+					"3596000": "0xCB6Ff8263E26a133F736cF7149226C3B65111Bcb",
 				},
 				BlockAlloc: map[string]interface{}{
 					"1891968": map[string]interface{}{

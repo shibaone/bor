@@ -59,6 +59,11 @@ func makeGasSStoreFunc(clearingRefund uint64) gasFunc {
 			return cost + params.WarmStorageReadCostEIP2929, nil // SLOAD_GAS
 		}
 
+		ct := fhevm.GetCiphertextFromMemory(evm.FhevmEnvironment(), value)
+		if ct != nil {
+			cost += evm.fhevmEnvironment.params.GasCosts.FheStorageSstoreGas[ct.Type()]
+		}
+
 		original := evm.StateDB.GetCommittedState(contract.Address(), x.Bytes32())
 		if original == current {
 			if original == (common.Hash{}) { // create slot (2.1.1)

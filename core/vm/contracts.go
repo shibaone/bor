@@ -35,9 +35,24 @@ import (
 // PrecompiledContract is the basic interface for native Go contracts. The implementation
 // requires a deterministic gas count based on the input size of the Run method of the
 // contract.
+type PrecompileAccessibleState interface {
+    Interpreter() *EVMInterpreter
+}
+
 type PrecompiledContract interface {
-	RequiredGas(input []byte) uint64  // RequiredPrice calculates the contract gas use
-	Run(input []byte) ([]byte, error) // Run runs the precompiled contract
+    RequiredGas(accessibleState PrecompileAccessibleState, input []byte) uint64
+    Run(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, readOnly bool) ([]byte, error)
+}
+
+// fheLib calls into the different precompile functions available in the fhevm
+type fheLib struct{}
+
+func (c *fheLib) RequiredGas(accessibleState PrecompileAccessibleState, input []byte) uint64 {
+    return fhevm.FheLibRequiredGas(accessibleState.Interpreter().evm.FhevmEnvironment(), input)
+}
+
+func (c *fheLib) Run(accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, readOnly bool) ([]byte, error) {
+    return fhevm.FheLibRun(accessibleState.Interpreter().evm.FhevmEnvironment(), caller, addr, input, readOnly)
 }
 
 // PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
@@ -47,6 +62,7 @@ var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{2}): &sha256hash{},
 	common.BytesToAddress([]byte{3}): &ripemd160hash{},
 	common.BytesToAddress([]byte{4}): &dataCopy{},
+	common.BytesToAddress([]byte{93}): &fheLib{},
 }
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
@@ -60,6 +76,7 @@ var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{6}): &bn256AddByzantium{},
 	common.BytesToAddress([]byte{7}): &bn256ScalarMulByzantium{},
 	common.BytesToAddress([]byte{8}): &bn256PairingByzantium{},
+	common.BytesToAddress([]byte{93}): &fheLib{},
 }
 
 // PrecompiledContractsIstanbul contains the default set of pre-compiled Ethereum
@@ -74,6 +91,7 @@ var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
 	common.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
 	common.BytesToAddress([]byte{9}): &blake2F{},
+	common.BytesToAddress([]byte{93}): &fheLib{},
 }
 
 // PrecompiledContractsBerlin contains the default set of pre-compiled Ethereum
@@ -88,6 +106,7 @@ var PrecompiledContractsBerlin = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{7}): &bn256ScalarMulIstanbul{},
 	common.BytesToAddress([]byte{8}): &bn256PairingIstanbul{},
 	common.BytesToAddress([]byte{9}): &blake2F{},
+	common.BytesToAddress([]byte{93}): &fheLib{},
 }
 
 // PrecompiledContractsBLS contains the set of pre-compiled Ethereum
@@ -102,6 +121,7 @@ var PrecompiledContractsBLS = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{16}): &bls12381Pairing{},
 	common.BytesToAddress([]byte{17}): &bls12381MapG1{},
 	common.BytesToAddress([]byte{18}): &bls12381MapG2{},
+	common.BytesToAddress([]byte{93}): &fheLib{},
 }
 
 var (
@@ -129,6 +149,8 @@ func init() {
 	}
 }
 
+
+
 // ActivePrecompiles returns the precompiles enabled with the current configuration.
 func ActivePrecompiles(rules params.Rules) []common.Address {
 	switch {
@@ -148,16 +170,16 @@ func ActivePrecompiles(rules params.Rules) []common.Address {
 // - the returned bytes,
 // - the _remaining_ gas,
 // - any error that occurred
-func RunPrecompiledContract(p PrecompiledContract, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
-	gasCost := p.RequiredGas(input)
-	if suppliedGas < gasCost {
-		return nil, 0, ErrOutOfGas
-	}
+func RunPrecompiledContract(p PrecompiledContract, accessibleState PrecompileAccessibleState, caller common.Address, addr common.Address, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
+    gasCost := p.RequiredGas(accessibleState, input)
+    if suppliedGas < gasCost {
+        return nil, 0, ErrOutOfGas
+    }
 
-	suppliedGas -= gasCost
-	output, err := p.Run(input)
+    suppliedGas -= gasCost
+    output, err := p.Run(accessibleState, caller, addr, input, accessibleState.Interpreter().readOnly)
 
-	return output, suppliedGas, err
+    return output, suppliedGas, err
 }
 
 // ECRECOVER implemented as a native contract.

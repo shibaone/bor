@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/zama-ai/fhevm-go/fhevm"
 
 	lru "github.com/hashicorp/golang-lru"
 )
@@ -56,6 +57,8 @@ type Config struct {
 	// parallel EVM configs
 	ParallelEnable               bool
 	ParallelSpeculativeProcesses int
+	IsEthCall                    bool
+	IsGasEstimation              bool
 }
 
 // ScopeContext contains the things that are per-call, such as stack and memory,
@@ -543,4 +546,16 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 	}
 
 	return res, err
+}
+
+func (s *ScopeContext) GetMemory() fhevm.Memory {
+	return s.Memory
+}
+
+func (s *ScopeContext) GetStack() fhevm.Stack {
+	return s.Stack
+}
+
+func (s *ScopeContext) GetContract() fhevm.Contract {
+	return s.Contract
 }

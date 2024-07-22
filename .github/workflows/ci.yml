@@ -20,7 +20,7 @@ jobs:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
+        os: [ ubuntu-24.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
         - uses: actions/checkout@v3
@@ -30,11 +30,21 @@ jobs:
 
         - uses: actions/setup-go@v3
           with:
-            go-version: 1.20.x
+            go-version: 1.22.x
 
-        - name: Install dependencies on Linux
+        - name: Install system dependencies on Linux
           if: runner.os == 'Linux'
           run: sudo apt update && sudo apt install build-essential
+
+        - name: Install Rust dependencies
+          run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh && bash rustup.sh -y
+        - name: Install FHE EVM dependencies
+          run: |
+            mkdir -p "$GITHUB_WORKSPACE/../fhevm-go"
+            git clone --depth 1 --branch v0.5.0 https://github.com/zama-ai/fhevm-go.git $GITHUB_WORKSPACE/../fhevm-go
+            cd $GITHUB_WORKSPACE/../fhevm-go
+            git submodule update --init --recursive
+            make build
 
         - uses: actions/cache@v3
           with:
@@ -52,7 +62,7 @@ jobs:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
+        os: [ ubuntu-24.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
         - uses: actions/checkout@v3
@@ -62,7 +72,7 @@ jobs:
 
         - uses: actions/setup-go@v3
           with:
-            go-version: 1.20.x
+            go-version: 1.22.x
 
         - name: Install dependencies on Linux
           if: runner.os == 'Linux'
@@ -80,7 +90,7 @@ jobs:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
+        os: [ ubuntu-24.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
         - uses: actions/checkout@v3
@@ -90,7 +100,7 @@ jobs:
 
         - uses: actions/setup-go@v3
           with:
-            go-version: 1.20.x
+            go-version: 1.22.x
 
         - name: Install dependencies on Linux
           if: runner.os == 'Linux'
@@ -141,11 +151,22 @@ jobs:
 
         - uses: actions/setup-go@v3
           with:
-            go-version: 1.20.x
+            go-version: 1.22.x
 
         - name: Install dependencies on Linux
           if: runner.os == 'Linux'
           run: sudo apt update && sudo apt install build-essential
+
+        - name: Install Rust dependencies
+          run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh && bash rustup.sh -y
+
+        - name: Install FHE EVM dependencies
+          run: |
+            mkdir -p "$GITHUB_WORKSPACE/../fhevm-go"
+            git clone --depth 1 --branch v0.5.0 https://github.com/zama-ai/fhevm-go.git $GITHUB_WORKSPACE/../fhevm-go
+            cd $GITHUB_WORKSPACE/../fhevm-go
+            git submodule update --init --recursive
+            make build
 
         - uses: actions/cache@v3
           with:
@@ -168,7 +189,7 @@ jobs:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
+        os: [ ubuntu-24.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     needs: [unit-tests, integration-tests]
     steps:
@@ -183,7 +204,7 @@ jobs:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
     strategy:
       matrix:
-        os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
+        os: [ ubuntu-24.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
         - uses: actions/checkout@v3
@@ -199,6 +220,17 @@ jobs:
           with:
             go-version: 1.22.x
 
+        - name: Install Rust dependencies
+          run: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup.sh && bash rustup.sh -y
+
+        - name: Install FHE EVM dependencies
+          run: |
+            mkdir -p "$GITHUB_WORKSPACE/../fhevm-go"
+            git clone --depth 1 --branch v0.5.0 https://github.com/zama-ai/fhevm-go.git $GITHUB_WORKSPACE/../fhevm-go
+            cd $GITHUB_WORKSPACE/../fhevm-go
+            git submodule update --init --recursive
+            make build
+        
         - name: Checkout matic-cli
           uses: actions/checkout@v3
           with:

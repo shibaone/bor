@@ -77,7 +77,7 @@ require (
 	github.com/tendermint/tendermint v0.34.21
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.17.2-0.20221006022127-8f469abc00aa
-	github.com/zama-ai/fhevm-go v1.0.0
+	github.com/zama-ai/fhevm-go v0.5.0
 	golang.org/x/crypto v0.16.0
 	golang.org/x/exp v0.0.0-20230206171751-46f607a40771
 	golang.org/x/sync v0.3.0
@@ -274,4 +274,4 @@ replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 
 replace go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.5.1
 
-replace github.com/zama-ai/fhevm-go v1.0.0 => ../fhevm-go
+replace github.com/zama-ai/fhevm-go v0.5.0 => ../fhevm-go

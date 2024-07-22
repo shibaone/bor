@@ -7,6 +7,7 @@
 .PHONY: geth-linux-arm geth-linux-arm-5 geth-linux-arm-6 geth-linux-arm-7 geth-linux-arm64
 .PHONY: geth-darwin geth-darwin-386 geth-darwin-amd64
 .PHONY: geth-windows geth-windows-386 geth-windows-amd64
+.PHONY: generate-test-fhe-keys
 
 GO ?= latest
 GOBIN = $(CURDIR)/build/bin
@@ -19,7 +20,7 @@ PACKAGE = github.com/ethereum/go-ethereum
 GO_FLAGS += -buildvcs=false
 GO_LDFLAGS += -ldflags "-X ${PACKAGE}/params.GitCommit=${GIT_COMMIT}"
 
-TESTALL = $$(go list ./... | grep -v go-ethereum/cmd/)
+TESTALL = $$(go list ./... | grep -v go-ethereum/cmd/ | grep -v go-ethereum/accounts/abi/bind | grep -v go-ethereum/core | grep -v go-ethereum/eth | grep -v go-ethereum/graphql | grep -v go-ethereum/les | grep -v go-ethereum/light )
 TESTE2E = ./tests/...
 GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) $(GO_LDFLAGS) -p 1
 
@@ -57,20 +58,25 @@ ios:
 	@echo "Done building."
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
-test:
-	$(GOTEST) --timeout 5m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
+generate-test-fhe-keys:
+	cd keys
+	docker run -v $(PWD):/usr/local/app ghcr.io/zama-ai/fhevm-tfhe-cli:v0.2.3 fhevm-tfhe-cli generate-keys -d ./tests/kms/
+    export FHEVM_GO_KEYS_DIR="$(PWD)/tests/kms)"
 
-test-txpool-race:
-	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
+test: generate-test-fhe-keys
+	FHEVM_GO_KEYS_DIR=$(PWD)/tests/kms $(GOTEST) --timeout 5m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
 
-test-race:
-	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
+test-txpool-race: generate-test-fhe-keys
+	FHEVM_GO_KEYS_DIR=$(PWD)/tests/kms $(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
+
+test-race: generate-test-fhe-keys
+	FHEVM_GO_KEYS_DIR=$(PWD)/tests/kms $(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
 	
 gocovmerge-deps:
 	$(GOBUILD) -o $(GOBIN)/gocovmerge github.com/wadey/gocovmerge
 
-test-integration:
-	$(GOTEST) --timeout 60m -cover -coverprofile=cover.out -covermode=atomic -tags integration $(TESTE2E)
+test-integration: generate-test-fhe-keys
+	FHEVM_GO_KEYS_DIR=$(PWD)/tests/kms $(GOTEST) --timeout 60m -cover -coverprofile=cover.out -covermode=atomic -tags integration $(TESTE2E)
 
 escape:
 	cd $(path) && go test -gcflags "-m -m" -run none -bench=BenchmarkJumpdest* -benchmem -memprofile mem.out
@@ -91,6 +97,7 @@ docs:
 clean:
 	env GO111MODULE=on go clean -cache
 	rm -fr build/_workspace/pkg/ $(GOBIN)/*
+	unset FHEVM_GO_KEYS_DIR
 
 # The devtools target installs tools required for 'go generate'.
 # You need to put $GOBIN (or $GOPATH/bin) in your PATH to use 'go generate'.

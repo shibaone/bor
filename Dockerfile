@@ -19,11 +19,12 @@ RUN cd fhevm-go && make build
 
 WORKDIR ${BOR_DIR}
 COPY . .
+COPY bor/ /var/lib/bor/
 RUN make bor
 
 RUN cp build/bin/bor /usr/bin/
 
-ENV SHELL /bin/bash
-EXPOSE 8545 8546 8547 30303 30303/udp
+ENV SHELL=/bin/bash
+EXPOSE 8545 8546 30303 30303/udp
 
 ENTRYPOINT ["bor"]

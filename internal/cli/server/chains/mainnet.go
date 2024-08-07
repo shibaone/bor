@@ -28,11 +28,11 @@ var mainnetBor = &Chain{
 			BerlinBlock:         big.NewInt(14750000),
 			LondonBlock:         big.NewInt(23850000),
 			ShanghaiBlock:       big.NewInt(50523000),
+			CancunBlock:         big.NewInt(54876000),
 			Bor: &params.BorConfig{
-				JaipurBlock:           big.NewInt(23850000),
-				DelhiBlock:            big.NewInt(38189056),
-				ParallelUniverseBlock: big.NewInt(0),
-				IndoreBlock:           big.NewInt(44934656),
+				JaipurBlock: big.NewInt(23850000),
+				DelhiBlock:  big.NewInt(38189056),
+				IndoreBlock: big.NewInt(44934656),
 				StateSyncConfirmationDelay: map[string]uint64{
 					"44934656": 128,
 				},

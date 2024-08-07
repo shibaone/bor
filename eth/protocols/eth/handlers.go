@@ -382,8 +382,10 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 		return nil // TODO(karalabe): return error eventually, but wait a few releases
 	}
 
+	msgTime := msg.Time()
 	ann.Block.ReceivedAt = msg.Time()
 	ann.Block.ReceivedFrom = peer
+	ann.Block.AnnouncedAt = &msgTime
 
 	// Mark the peer as owning the block
 	peer.markBlock(ann.Block.Hash())
@@ -560,7 +562,7 @@ func answerGetPooledTransactions(backend Backend, query GetPooledTransactionsPac
 			continue
 		}
 		// If known, encode and queue for response packet
-		if encoded, err := rlp.EncodeToBytes(tx); err != nil {
+		if encoded, err := rlp.EncodeToBytes(tx.Tx); err != nil {
 			log.Error("Failed to encode transaction", "err", err)
 		} else {
 			hashes = append(hashes, hash)

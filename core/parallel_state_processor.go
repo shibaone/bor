@@ -288,6 +288,11 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps := GetDeps(blockTxDependency)
 
+	if !VerifyDeps(deps) || len(blockTxDependency) != len(block.Transactions()) {
+		blockTxDependency = nil
+		deps = make(map[int][]int)
+	}
+
 	if blockTxDependency != nil {
 		metadata = true
 	}
@@ -296,7 +301,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
-		msg, err := TransactionToMessage(tx, types.MakeSigner(p.config, header.Number), header.BaseFee)
+		msg, err := TransactionToMessage(tx, types.MakeSigner(p.config, header.Number, header.Time), header.BaseFee)
 		if err != nil {
 			log.Error("error creating message", "err", err)
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -308,63 +313,36 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			shouldDelayFeeCal = false
 		}
 
-		if len(blockTxDependency) != len(block.Transactions()) {
-			task := &ExecutionTask{
-				msg:               *msg,
-				config:            p.config,
-				gasLimit:          block.GasLimit(),
-				blockNumber:       blockNumber,
-				blockHash:         blockHash,
-				tx:                tx,
-				index:             i,
-				cleanStateDB:      cleansdb,
-				finalStateDB:      statedb,
-				blockChain:        p.bc,
-				header:            header,
-				evmConfig:         cfg,
-				shouldDelayFeeCal: &shouldDelayFeeCal,
-				sender:            msg.From,
-				totalUsedGas:      usedGas,
-				receipts:          &receipts,
-				allLogs:           &allLogs,
-				dependencies:      deps[i],
-				coinbase:          coinbase,
-				blockContext:      blockContext,
-			}
-
-			tasks = append(tasks, task)
-		} else {
-			task := &ExecutionTask{
-				msg:               *msg,
-				config:            p.config,
-				gasLimit:          block.GasLimit(),
-				blockNumber:       blockNumber,
-				blockHash:         blockHash,
-				tx:                tx,
-				index:             i,
-				cleanStateDB:      cleansdb,
-				finalStateDB:      statedb,
-				blockChain:        p.bc,
-				header:            header,
-				evmConfig:         cfg,
-				shouldDelayFeeCal: &shouldDelayFeeCal,
-				sender:            msg.From,
-				totalUsedGas:      usedGas,
-				receipts:          &receipts,
-				allLogs:           &allLogs,
-				dependencies:      nil,
-				coinbase:          coinbase,
-				blockContext:      blockContext,
-			}
-
-			tasks = append(tasks, task)
+		task := &ExecutionTask{
+			msg:               *msg,
+			config:            p.config,
+			gasLimit:          block.GasLimit(),
+			blockNumber:       blockNumber,
+			blockHash:         blockHash,
+			tx:                tx,
+			index:             i,
+			cleanStateDB:      cleansdb,
+			finalStateDB:      statedb,
+			blockChain:        p.bc,
+			header:            header,
+			evmConfig:         cfg,
+			shouldDelayFeeCal: &shouldDelayFeeCal,
+			sender:            msg.From,
+			totalUsedGas:      usedGas,
+			receipts:          &receipts,
+			allLogs:           &allLogs,
+			dependencies:      deps[i],
+			coinbase:          coinbase,
+			blockContext:      blockContext,
 		}
+
+		tasks = append(tasks, task)
 	}
 
 	backupStateDB := statedb.Copy()
 
 	profile := false
-	result, err := blockstm.ExecuteParallel(tasks, profile, metadata, cfg.ParallelSpeculativeProcesses, interruptCtx)
+	result, err := blockstm.ExecuteParallel(tasks, profile, metadata, p.bc.parallelSpeculativeProcesses, interruptCtx)
 
 	if err == nil && profile && result.Deps != nil {
 		_, weight := result.Deps.LongestPath(*result.Stats)
@@ -398,7 +376,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false, metadata, cfg.ParallelSpeculativeProcesses, interruptCtx)
+			_, err = blockstm.ExecuteParallel(tasks, false, metadata, p.bc.parallelSpeculativeProcesses, interruptCtx)
 
 			break
 		}
@@ -426,4 +404,22 @@ func GetDeps(txDependency [][]uint64) map[int][]int {
 	}
 
 	return deps
+}
+
+// returns true if dependencies are correct
+func VerifyDeps(deps map[int][]int) bool {
+	// number of transactions in the block
+	n := len(deps)
+
+	// Handle out-of-range and circular dependency problem
+	for i := 0; i <= n-1; i++ {
+		val := deps[i]
+		for _, depTx := range val {
+			if depTx >= n || depTx >= i {
+				return false
+			}
+		}
+	}
+
+	return true
 }

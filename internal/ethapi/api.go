@@ -1205,15 +1205,15 @@ func (context *ChainContext) GetHeader(hash common.Hash, number uint64) *types.H
 	return header
 }
 
-func doCall(ctx context.Context, b Backend, args TransactionArgs, state *state.StateDB, header *types.Header, overrides *StateOverride, blockOverrides *BlockOverrides, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
+func doCall(ctx context.Context, b Backend, args TransactionArgs, state *state.StateDB, header *types.Header, overrides *StateOverride, blockOverrides *BlockOverrides, timeout time.Duration, globalGasCap uint64, isGasEstimation bool, isEthCall bool) (*core.ExecutionResult, error) {
 	if err := overrides.Apply(state); err != nil {
 		return nil, err
 	}
 
-	return doCallWithState(ctx, b, args, header, state, timeout, globalGasCap, blockOverrides)
+	return doCallWithState(ctx, b, args, header, state, timeout, globalGasCap, blockOverrides, isGasEstimation, isEthCall)
 }
 
-func doCallWithState(ctx context.Context, b Backend, args TransactionArgs, header *types.Header, state *state.StateDB, timeout time.Duration, globalGasCap uint64, blockOverrides *BlockOverrides) (*core.ExecutionResult, error) {
+func doCallWithState(ctx context.Context, b Backend, args TransactionArgs, header *types.Header, state *state.StateDB, timeout time.Duration, globalGasCap uint64, blockOverrides *BlockOverrides, isGasEstimation bool, isEthCall bool) (*core.ExecutionResult, error) {
 	// Setup context so it may be cancelled the call has completed
 	// or, in case of unmetered gas, setup a context with a timeout.
 	var cancel context.CancelFunc
@@ -1235,7 +1235,7 @@ func doCallWithState(ctx context.Context, b Backend, args TransactionArgs, heade
 	if blockOverrides != nil {
 		blockOverrides.Apply(&blockCtx)
 	}
-	evm, vmError := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true}, &blockCtx)
+	evm, vmError := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true, IsGasEstimation: isGasEstimation, IsEthCall: isEthCall}, &blockCtx)
 
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
@@ -1264,7 +1264,7 @@ func doCallWithState(ctx context.Context, b Backend, args TransactionArgs, heade
 	return result, nil
 }
 
-func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, state *state.StateDB, overrides *StateOverride, blockOverrides *BlockOverrides, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
+func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, state *state.StateDB, overrides *StateOverride, blockOverrides *BlockOverrides, timeout time.Duration, globalGasCap uint64, isGasEstimation bool, isEthCall bool) (*core.ExecutionResult, error) {
 	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
 
 	var (
@@ -1291,7 +1291,7 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 		}
 	}
 
-	return doCall(ctx, b, args, state, header, overrides, blockOverrides, timeout, globalGasCap)
+	return doCall(ctx, b, args, state, header, overrides, blockOverrides, timeout, globalGasCap, true, true)
 }
 
 func newRevertError(result *core.ExecutionResult) *revertError {
@@ -1346,7 +1346,7 @@ func (s *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrO
 // Note, this function doesn't make and changes in the state/blockchain and is
 // useful to execute and retrieve values.
 func (s *BlockChainAPI) CallWithState(ctx context.Context, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, state *state.StateDB, overrides *StateOverride, blockOverrides *BlockOverrides) (hexutil.Bytes, error) {
-	result, err := DoCall(ctx, s.b, args, blockNrOrHash, state, overrides, blockOverrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
+	result, err := DoCall(ctx, s.b, args, blockNrOrHash, state, overrides, blockOverrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap(), true, true)
 	if err != nil {
 		return nil, err
 	}
@@ -1450,7 +1450,7 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 	executable := func(gas uint64, state *state.StateDB, header *types.Header) (bool, *core.ExecutionResult, error) {
 		args.Gas = (*hexutil.Uint64)(&gas)
 
-		result, err := doCall(ctx, b, args, state, header, nil, nil, 0, gasCap)
+		result, err := doCall(ctx, b, args, state, header, nil, nil, 0, gasCap, true, true)
 		if err != nil {
 			if errors.Is(err, core.ErrIntrinsicGas) {
 				return true, nil, nil // Special case, raise gas limit

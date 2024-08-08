@@ -35,6 +35,15 @@ type Stack struct {
 	data []uint256.Int
 }
 
+// Peek implements fhevm.Stack.
+func (st *Stack) Pop() uint256.Int {
+	return st.pop()
+}
+
+func (st *Stack) Peek() *uint256.Int {
+	return st.peek()
+}
+
 func newstack() *Stack {
 	return stackPool.Get().(*Stack)
 }

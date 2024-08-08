@@ -6,6 +6,7 @@ on:
       - "qa"
       - "develop"
       - "v0.5.0/yann-zama-fhe"
+      - "v1.2.7/yann-zama-fhe"
 
   pull_request:
     branches:

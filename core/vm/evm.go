@@ -140,6 +140,7 @@ type FhevmImplementation struct {
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
 // only ever be used *once*.
 func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig *params.ChainConfig, config Config) *EVM {
+	logger := fhevm.NewDefaultLogger()
 	evm := &EVM{
 		Context:          blockCtx,
 		TxContext:        txCtx,
@@ -149,7 +150,7 @@ func NewEVM(blockCtx BlockContext, txCtx TxContext, statedb StateDB, chainConfig
 		chainRules:       chainConfig.Rules(blockCtx.BlockNumber, blockCtx.Random != nil, blockCtx.Time),
 		isGasEstimation:  config.IsGasEstimation,
 		isEthCall:        config.IsEthCall,
-		fhevmEnvironment: FhevmImplementation{interpreter: nil, logger: &fhevm.DefaultLogger{}, data: fhevm.NewFhevmData(), params: fhevm.DefaultFhevmParams()},
+		fhevmEnvironment: FhevmImplementation{interpreter: nil, logger: logger, data: fhevm.NewFhevmData(), params: fhevm.DefaultFhevmParams()},
 	}
 	evm.interpreter = NewEVMInterpreter(evm)
 	evm.fhevmEnvironment.interpreter = evm.interpreter

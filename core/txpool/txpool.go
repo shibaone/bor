@@ -527,6 +527,8 @@ func (pool *TxPool) SetGasPrice(price *big.Int) {
 	pool.gasPriceMu.Lock()
 	defer pool.gasPriceMu.Unlock()
 
+	fmt.Println("Txpool SetGasPrice", price.Uint64())
+
 	old := pool.gasPrice
 	pool.gasPrice = price
 
@@ -1302,6 +1304,13 @@ func (pool *TxPool) addTx(tx *types.Transaction, local, sync bool) error {
 			err = ErrAlreadyKnown
 
 			knownTxMeter.Mark(1)
+
+			return
+		}
+
+		if err = pool.validateTxBasics(tx, local); err != nil {
+
+			invalidTxMeter.Mark(1)
 
 			return
 		}

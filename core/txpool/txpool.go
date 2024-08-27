@@ -527,8 +527,6 @@ func (pool *TxPool) SetGasPrice(price *big.Int) {
 	pool.gasPriceMu.Lock()
 	defer pool.gasPriceMu.Unlock()
 
-	fmt.Println("Txpool SetGasPrice", price.Uint64())
-
 	old := pool.gasPrice
 	pool.gasPrice = price
 

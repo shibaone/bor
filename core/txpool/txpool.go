@@ -1295,7 +1295,7 @@ func (pool *TxPool) addTx(tx *types.Transaction, local, sync bool) error {
 	)
 
 	func() {
-		// If the transaction is known, pre-set the error slot
+		// If the transaction is known, pre-set the error slot's
 		hash = tx.Hash()
 
 		if pool.all.Get(hash) != nil {

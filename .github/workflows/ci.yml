@@ -202,8 +202,8 @@ jobs:
         - name: Checkout matic-cli
           uses: actions/checkout@v3
           with:
-            repository: shibaone/matic-cli
-            ref: master
+            repository: maticnetwork/matic-cli
+            ref: 013bbb7b647cd7a9b7824b4c59bf59667ea37421
             path: matic-cli
 
         - name: Install dependencies on Linux

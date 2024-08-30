@@ -202,7 +202,7 @@ jobs:
         - name: Checkout matic-cli
           uses: actions/checkout@v3
           with:
-            repository: maticnetwork/matic-cli
+            repository: shibaone/matic-cli
             ref: master
             path: matic-cli
 

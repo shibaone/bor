@@ -62,7 +62,7 @@ gcmode = "archive"
 
 [miner]
     gaslimit = 20000000
-    # gasprice = "30000000000"
+    gasprice = "1000000000"
     # mine = false
     # etherbase = ""
     # extradata = ""

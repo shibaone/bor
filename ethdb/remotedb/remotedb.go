@@ -83,6 +83,14 @@ func (db *Database) Ancients() (uint64, error) {
 	return resp, err
 }
 
+func (db *Database) AncientOffSet() uint64 {
+	panic("not supported")
+}
+
+func (db *Database) ItemAmountInAncient() (uint64, error) {
+	panic("not supported")
+}
+
 func (db *Database) Tail() (uint64, error) {
 	panic("not supported")
 }
@@ -107,11 +115,11 @@ func (db *Database) ModifyAncients(f func(ethdb.AncientWriteOp) error) (int64, e
 	panic("not supported")
 }
 
-func (db *Database) TruncateHead(n uint64) error {
+func (db *Database) TruncateHead(n uint64) (uint64, error) {
 	panic("not supported")
 }
 
-func (db *Database) TruncateTail(n uint64) error {
+func (db *Database) TruncateTail(n uint64) (uint64, error) {
 	panic("not supported")
 }
 

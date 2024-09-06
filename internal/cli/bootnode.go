@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/cmd/bootnode"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
-	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/prometheus"
@@ -138,27 +138,11 @@ func (b *BootnodeCommand) Run(args []string) int {
 		return 1
 	}
 
-	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
-
-	var logInfo string
-
-	if b.verbosity != 0 && b.logLevel != "" {
-		b.UI.Warn(fmt.Sprintf("Both verbosity and log-level provided, using verbosity: %v", b.verbosity))
-		logInfo = server.VerbosityIntToString(b.verbosity)
-	} else if b.verbosity != 0 {
-		logInfo = server.VerbosityIntToString(b.verbosity)
-	} else {
-		logInfo = b.logLevel
-	}
-
-	lvl, err := log.LvlFromString(strings.ToLower(logInfo))
-	if err == nil {
-		glogger.Verbosity(lvl)
-	} else {
-		glogger.Verbosity(log.LvlInfo)
-	}
-
-	log.Root().SetHandler(glogger)
+	// logging
+	glogger := log.NewGlogHandler(log.NewTerminalHandler(os.Stderr, false))
+	lvl := log.FromLegacyLevel(b.verbosity)
+	glogger.Verbosity(lvl)
+	log.SetDefault(log.NewLogger(glogger))
 
 	natm, err := nat.Parse(b.nat)
 	if err != nil {
@@ -213,33 +197,25 @@ func (b *BootnodeCommand) Run(args []string) int {
 	}
 
 	conn, err := net.ListenUDP("udp", addr)
-
 	if err != nil {
 		b.UI.Error(fmt.Sprintf("failed to listen udp addr '%s': %v", b.listenAddr, err))
 		return 1
 	}
-
-	realaddr := conn.LocalAddr().(*net.UDPAddr)
-	if natm != nil {
-		if !realaddr.IP.IsLoopback() {
-			go nat.Map(natm, nil, "udp", realaddr.Port, realaddr.Port, "ethereum discovery")
-		}
-
-		if ext, err := natm.ExternalIP(); err == nil {
-			// nolint: govet
-			realaddr = &net.UDPAddr{IP: ext, Port: realaddr.Port}
-		}
-	}
-
-	n := enode.NewV4(&nodeKey.PublicKey, addr.IP, addr.Port, addr.Port)
-	b.UI.Info(n.String())
-
-	if b.dryRun {
-		return 0
-	}
+	defer conn.Close()
 
 	db, _ := enode.OpenDB("")
 	ln := enode.NewLocalNode(db, nodeKey)
+
+	listenerAddr := conn.LocalAddr().(*net.UDPAddr)
+	if natm != nil {
+		natAddr := bootnode.DoPortMapping(natm, ln, listenerAddr)
+		if natAddr != nil {
+			listenerAddr = natAddr
+		}
+	}
+
+	bootnode.PrintNotice(&nodeKey.PublicKey, *listenerAddr)
+
 	cfg := discover.Config{
 		PrivateKey: nodeKey,
 		Log:        log.Root(),

@@ -17,13 +17,16 @@
 package types
 
 import (
+	"bytes"
 	"math/big"
 
 	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
+// DynamicFeeTx represents an EIP-1559 transaction.
 type DynamicFeeTx struct {
 	ChainID          *big.Int
 	Nonce            uint64
@@ -112,38 +115,11 @@ func (tx *DynamicFeeTx) accessList() AccessList { return tx.AccessList }
 func (tx *DynamicFeeTx) data() []byte           { return tx.Data }
 func (tx *DynamicFeeTx) gas() uint64            { return tx.Gas }
 func (tx *DynamicFeeTx) gasFeeCap() *big.Int    { return tx.GasFeeCap }
-func (tx *DynamicFeeTx) gasFeeCapU256() *uint256.Int {
-	if tx.gasFeeCapUint256 != nil {
-		return tx.gasFeeCapUint256
-	}
-
-	tx.gasFeeCapUint256, _ = uint256.FromBig(tx.GasFeeCap)
-
-	return tx.gasFeeCapUint256
-}
-func (tx *DynamicFeeTx) gasTipCap() *big.Int { return tx.GasTipCap }
-func (tx *DynamicFeeTx) gasTipCapU256() *uint256.Int {
-	if tx.gasTipCapUint256 != nil {
-		return tx.gasTipCapUint256
-	}
-
-	tx.gasTipCapUint256, _ = uint256.FromBig(tx.GasTipCap)
-
-	return tx.gasTipCapUint256
-}
-func (tx *DynamicFeeTx) gasPrice() *big.Int { return tx.GasFeeCap }
-func (tx *DynamicFeeTx) gasPriceU256() *uint256.Int {
-	if tx.gasFeeCapUint256 != nil {
-		return tx.gasTipCapUint256
-	}
-
-	tx.gasFeeCapUint256, _ = uint256.FromBig(tx.GasFeeCap)
-
-	return tx.gasFeeCapUint256
-}
-func (tx *DynamicFeeTx) value() *big.Int     { return tx.Value }
-func (tx *DynamicFeeTx) nonce() uint64       { return tx.Nonce }
-func (tx *DynamicFeeTx) to() *common.Address { return tx.To }
+func (tx *DynamicFeeTx) gasTipCap() *big.Int    { return tx.GasTipCap }
+func (tx *DynamicFeeTx) gasPrice() *big.Int     { return tx.GasFeeCap }
+func (tx *DynamicFeeTx) value() *big.Int        { return tx.Value }
+func (tx *DynamicFeeTx) nonce() uint64          { return tx.Nonce }
+func (tx *DynamicFeeTx) to() *common.Address    { return tx.To }
 
 func (tx *DynamicFeeTx) effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int {
 	if baseFee == nil {
@@ -164,4 +140,12 @@ func (tx *DynamicFeeTx) rawSignatureValues() (v, r, s *big.Int) {
 
 func (tx *DynamicFeeTx) setSignatureValues(chainID, v, r, s *big.Int) {
 	tx.ChainID, tx.V, tx.R, tx.S = chainID, v, r, s
+}
+
+func (tx *DynamicFeeTx) encode(b *bytes.Buffer) error {
+	return rlp.Encode(b, tx)
+}
+
+func (tx *DynamicFeeTx) decode(input []byte) error {
+	return rlp.DecodeBytes(input, tx)
 }

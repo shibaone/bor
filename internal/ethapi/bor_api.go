@@ -40,7 +40,7 @@ func (s *BlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context, bloc
 			formattedTxs := fields["transactions"].([]interface{})
 
 			if fullTx {
-				marshalledTx := newRPCTransaction(borTx, blockHash, blockNumber, txIndex, block.BaseFee(), s.b.ChainConfig())
+				marshalledTx := newRPCTransaction(borTx, blockHash, blockNumber, block.Time(), txIndex, block.BaseFee(), s.b.ChainConfig())
 				// newRPCTransaction calculates hash based on RLP of the transaction data.
 				// In case of bor block tx, we need simple derived tx hash (same as function argument) instead of RLP hash
 				marshalledTx.Hash = txHash
@@ -67,7 +67,7 @@ func NewBorAPI(b Backend) *BorAPI {
 
 // SendRawTransactionConditional will add the signed transaction to the transaction pool.
 // The sender/bundler is responsible for signing the transaction
-func (api *BorAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
+func (api *BorAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsPIP15) (common.Hash, error) {
 	tx := new(types.Transaction)
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
@@ -81,12 +81,12 @@ func (api *BorAPI) SendRawTransactionConditional(ctx context.Context, input hexu
 	}
 
 	// check block number range
-	if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
+	if err := currentHeader.ValidateBlockNumberOptionsPIP15(options.BlockNumberMin, options.BlockNumberMax); err != nil {
 		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
 	}
 
 	// check timestamp range
-	if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
+	if err := currentHeader.ValidateTimestampOptionsPIP15(options.TimestampMin, options.TimestampMax); err != nil {
 		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
 	}
 

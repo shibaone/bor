@@ -24,13 +24,14 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"sort"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"golang.org/x/exp/slices"
 )
 
 var nullNode *enode.Node
@@ -42,29 +43,33 @@ func init() {
 	nullNode = enode.SignNull(&r, enode.ID{})
 }
 
-func newTestTable(t transport) (*Table, *enode.DB) {
-	db, _ := enode.OpenDB("")
-
-	tab, _ := newTable(t, db, nil, log.Root())
+func newTestTable(t transport, cfg Config) (*Table, *enode.DB) {
+	tab, db := newInactiveTestTable(t, cfg)
 	go tab.loop()
+	return tab, db
+}
 
+// newInactiveTestTable creates a Table without running the main loop.
+func newInactiveTestTable(t transport, cfg Config) (*Table, *enode.DB) {
+	db, _ := enode.OpenDB("")
+	tab, _ := newTable(t, db, cfg)
 	return tab, db
 }
 
 // nodeAtDistance creates a node for which enode.LogDist(base, n.id) == ld.
-func nodeAtDistance(base enode.ID, ld int, ip net.IP) *node {
+func nodeAtDistance(base enode.ID, ld int, ip net.IP) *enode.Node {
 	var r enr.Record
 
 	r.Set(enr.IP(ip))
-
-	return wrapNode(enode.SignNull(&r, idAtDistance(base, ld)))
+	r.Set(enr.UDP(30303))
+	return enode.SignNull(&r, idAtDistance(base, ld))
 }
 
 // nodesAtDistance creates n nodes for which enode.LogDist(base, node.ID()) == ld.
 func nodesAtDistance(base enode.ID, ld int, n int) []*enode.Node {
 	results := make([]*enode.Node, n)
 	for i := range results {
-		results[i] = unwrapNode(nodeAtDistance(base, ld, intIP(i)))
+		results[i] = nodeAtDistance(base, ld, intIP(i))
 	}
 
 	return results
@@ -107,12 +112,14 @@ func intIP(i int) net.IP {
 }
 
 // fillBucket inserts nodes into the given bucket until it is full.
-func fillBucket(tab *Table, n *node) (last *node) {
-	ld := enode.LogDist(tab.self().ID(), n.ID())
-	b := tab.bucket(n.ID())
-
+func fillBucket(tab *Table, id enode.ID) (last *tableNode) {
+	ld := enode.LogDist(tab.self().ID(), id)
+	b := tab.bucket(id)
 	for len(b.entries) < bucketSize {
-		b.entries = append(b.entries, nodeAtDistance(tab.self().ID(), ld, intIP(ld)))
+		node := nodeAtDistance(tab.self().ID(), ld, intIP(ld))
+		if !tab.addFoundNode(node, false) {
+			panic("node not added")
+		}
 	}
 
 	return b.entries[bucketSize-1]
@@ -120,17 +127,19 @@ func fillBucket(tab *Table, n *node) (last *node) {
 
 // fillTable adds nodes the table to the end of their corresponding bucket
 // if the bucket is not full. The caller must not hold tab.mutex.
-func fillTable(tab *Table, nodes []*node) {
+func fillTable(tab *Table, nodes []*enode.Node, setLive bool) {
 	for _, n := range nodes {
-		tab.addSeenNode(n)
+		tab.addFoundNode(n, setLive)
 	}
 }
 
 type pingRecorder struct {
-	mu           sync.Mutex
-	dead, pinged map[enode.ID]bool
-	records      map[enode.ID]*enode.Node
-	n            *enode.Node
+	mu      sync.Mutex
+	cond    *sync.Cond
+	dead    map[enode.ID]bool
+	records map[enode.ID]*enode.Node
+	pinged  []*enode.Node
+	n       *enode.Node
 }
 
 func newPingRecorder() *pingRecorder {
@@ -139,12 +148,13 @@ func newPingRecorder() *pingRecorder {
 	r.Set(enr.IP{0, 0, 0, 0})
 	n := enode.SignNull(&r, enode.ID{})
 
-	return &pingRecorder{
+	t := &pingRecorder{
 		dead:    make(map[enode.ID]bool),
-		pinged:  make(map[enode.ID]bool),
 		records: make(map[enode.ID]*enode.Node),
 		n:       n,
 	}
+	t.cond = sync.NewCond(&t.mu)
+	return t
 }
 
 // updateRecord updates a node record. Future calls to ping and
@@ -160,12 +170,40 @@ func (t *pingRecorder) Self() *enode.Node           { return nullNode }
 func (t *pingRecorder) lookupSelf() []*enode.Node   { return nil }
 func (t *pingRecorder) lookupRandom() []*enode.Node { return nil }
 
+func (t *pingRecorder) waitPing(timeout time.Duration) *enode.Node {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Wake up the loop on timeout.
+	var timedout atomic.Bool
+	timer := time.AfterFunc(timeout, func() {
+		timedout.Store(true)
+		t.cond.Broadcast()
+	})
+	defer timer.Stop()
+
+	// Wait for a ping.
+	for {
+		if timedout.Load() {
+			return nil
+		}
+		if len(t.pinged) > 0 {
+			n := t.pinged[0]
+			t.pinged = append(t.pinged[:0], t.pinged[1:]...)
+			return n
+		}
+		t.cond.Wait()
+	}
+}
+
 // ping simulates a ping request.
 func (t *pingRecorder) ping(n *enode.Node) (seq uint64, err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.pinged[n.ID()] = true
+	t.pinged = append(t.pinged, n)
+	t.cond.Broadcast()
+
 	if t.dead[n.ID()] {
 		return 0, errTimeout
 	}
@@ -189,9 +227,8 @@ func (t *pingRecorder) RequestENR(n *enode.Node) (*enode.Node, error) {
 	return t.records[n.ID()], nil
 }
 
-func hasDuplicates(slice []*node) bool {
-	seen := make(map[enode.ID]bool)
-
+func hasDuplicates(slice []*enode.Node) bool {
+	seen := make(map[enode.ID]bool, len(slice))
 	for i, e := range slice {
 		if e == nil {
 			panic(fmt.Sprintf("nil *Node at %d", i))
@@ -240,15 +277,15 @@ func nodeEqual(n1 *enode.Node, n2 *enode.Node) bool {
 	return n1.ID() == n2.ID() && n1.IP().Equal(n2.IP())
 }
 
-func sortByID(nodes []*enode.Node) {
-	sort.Slice(nodes, func(i, j int) bool {
-		return string(nodes[i].ID().Bytes()) < string(nodes[j].ID().Bytes())
+func sortByID[N nodeType](nodes []N) {
+	slices.SortFunc(nodes, func(a, b N) int {
+		return bytes.Compare(a.ID().Bytes(), b.ID().Bytes())
 	})
 }
 
-func sortedByDistanceTo(distbase enode.ID, slice []*node) bool {
-	return sort.SliceIsSorted(slice, func(i, j int) bool {
-		return enode.DistCmp(distbase, slice[i].ID(), slice[j].ID()) < 0
+func sortedByDistanceTo(distbase enode.ID, slice []*enode.Node) bool {
+	return slices.IsSortedFunc(slice, func(a, b *enode.Node) int {
+		return enode.DistCmp(distbase, a.ID(), b.ID())
 	})
 }
 
@@ -281,4 +318,58 @@ func hexEncPubkey(h string) (ret encPubkey) {
 	copy(ret[:], b)
 
 	return ret
+}
+
+type nodeEventRecorder struct {
+	evc chan recordedNodeEvent
+}
+
+type recordedNodeEvent struct {
+	node  *tableNode
+	added bool
+}
+
+func newNodeEventRecorder(buffer int) *nodeEventRecorder {
+	return &nodeEventRecorder{
+		evc: make(chan recordedNodeEvent, buffer),
+	}
+}
+
+func (set *nodeEventRecorder) nodeAdded(b *bucket, n *tableNode) {
+	select {
+	case set.evc <- recordedNodeEvent{n, true}:
+	default:
+		panic("no space in event buffer")
+	}
+}
+
+func (set *nodeEventRecorder) nodeRemoved(b *bucket, n *tableNode) {
+	select {
+	case set.evc <- recordedNodeEvent{n, false}:
+	default:
+		panic("no space in event buffer")
+	}
+}
+
+func (set *nodeEventRecorder) waitNodePresent(id enode.ID, timeout time.Duration) bool {
+	return set.waitNodeEvent(id, timeout, true)
+}
+
+func (set *nodeEventRecorder) waitNodeAbsent(id enode.ID, timeout time.Duration) bool {
+	return set.waitNodeEvent(id, timeout, false)
+}
+
+func (set *nodeEventRecorder) waitNodeEvent(id enode.ID, timeout time.Duration, added bool) bool {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case ev := <-set.evc:
+			if ev.node.ID() == id && ev.added == added {
+				return true
+			}
+		case <-timer.C:
+			return false
+		}
+	}
 }

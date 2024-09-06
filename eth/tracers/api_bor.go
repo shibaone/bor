@@ -44,10 +44,7 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 	}
 
 	// block object cannot be converted to JSON since much of the fields are non-public
-	blockFields, err := ethapi.RPCMarshalBlock(block, true, true, api.backend.ChainConfig(), api.backend.ChainDb())
-	if err != nil {
-		return nil, err
-	}
+	blockFields := ethapi.RPCMarshalBlock(block, true, true, api.backend.ChainConfig(), api.backend.ChainDb())
 
 	res.Block = blockFields
 
@@ -71,16 +68,20 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 
 	// Execute all the transaction contained within the block concurrently
 	var (
-		signer                = types.MakeSigner(api.backend.ChainConfig(), block.Number())
-		txs, stateSyncPresent = api.getAllBlockTransactions(ctx, block)
-		deleteEmptyObjects    = api.backend.ChainConfig().IsEIP158(block.Number())
+		signer                               = types.MakeSigner(api.backend.ChainConfig(), block.Number(), block.Time())
+		txs, stateSyncPresent, stateSyncHash = api.getAllBlockTransactions(ctx, block)
+		deleteEmptyObjects                   = api.backend.ChainConfig().IsEIP158(block.Number())
 	)
 
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 
-	traceTxn := func(indx int, tx *types.Transaction, borTx bool) *TxTraceResult {
+	traceTxn := func(indx int, tx *types.Transaction, borTx bool, stateSyncHash common.Hash) *TxTraceResult {
 		message, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(message)
+		txHash := tx.Hash()
+		if borTx {
+			txHash = stateSyncHash
+		}
 
 		tracer := logger.NewStructLogger(config.Config)
 
@@ -89,13 +90,13 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 
 		// Call Prepare to clear out the statedb access list
 		// Not sure if we need to do this
-		statedb.SetTxContext(tx.Hash(), indx)
+		statedb.SetTxContext(txHash, indx)
 
 		var execRes *core.ExecutionResult
 
 		if borTx {
 			callmsg := prepareCallMessage(*message)
-			execRes, err = statefull.ApplyBorMessage(*vmenv, callmsg)
+			execRes, err = statefull.ApplyBorMessage(vmenv, callmsg)
 		} else {
 			execRes, err = core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.GasLimit), nil)
 		}
@@ -127,9 +128,9 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 
 	for indx, tx := range txs {
 		if stateSyncPresent && indx == len(txs)-1 {
-			res.Transactions = append(res.Transactions, traceTxn(indx, tx, true))
+			res.Transactions = append(res.Transactions, traceTxn(indx, tx, true, stateSyncHash))
 		} else {
-			res.Transactions = append(res.Transactions, traceTxn(indx, tx, false))
+			res.Transactions = append(res.Transactions, traceTxn(indx, tx, false, stateSyncHash))
 		}
 	}
 
@@ -143,7 +144,7 @@ type TraceBlockRequest struct {
 	Config     *TraceConfig
 }
 
-// If you use context as first parameter this function gets exposed automaticall on rpc endpoint
+// If you use context as first parameter this function gets exposed automatically on rpc endpoint
 func (api *API) TraceBorBlock(req *TraceBlockRequest) (*BlockTraceResult, error) {
 	ctx := context.Background()
 

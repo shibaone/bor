@@ -247,8 +247,11 @@ func (bc *BlockChain) GetReceiptsByHash(hash common.Hash) types.Receipts {
 	if number == nil {
 		return nil
 	}
-
-	receipts := rawdb.ReadReceipts(bc.db, hash, *number, bc.chainConfig)
+	header := bc.GetHeader(hash, *number)
+	if header == nil {
+		return nil
+	}
+	receipts := rawdb.ReadReceipts(bc.db, hash, *number, header.Time, bc.chainConfig)
 	if receipts == nil {
 		return nil
 	}
@@ -327,16 +330,16 @@ func (bc *BlockChain) HasBlockAndState(hash common.Hash, number uint64) bool {
 	return bc.HasState(block.Root())
 }
 
-// TrieNode retrieves a blob of data associated with a trie node
-// either from ephemeral in-memory cache, or from persistent storage.
-func (bc *BlockChain) TrieNode(hash common.Hash) ([]byte, error) {
-	return bc.stateCache.TrieDB().Node(hash)
-}
-
-// ContractCode retrieves a blob of data associated with a contract hash
-// either from ephemeral in-memory cache, or from persistent storage.
-func (bc *BlockChain) ContractCode(hash common.Hash) ([]byte, error) {
-	return bc.stateCache.ContractCode(common.Hash{}, hash)
+// stateRecoverable checks if the specified state is recoverable.
+// Note, this function assumes the state is not present, because
+// state is not treated as recoverable if it's available, thus
+// false will be returned in this case.
+func (bc *BlockChain) stateRecoverable(root common.Hash) bool {
+	if bc.triedb.Scheme() == rawdb.HashScheme {
+		return false
+	}
+	result, _ := bc.triedb.Recoverable(root)
+	return result
 }
 
 // ContractCodeWithPrefix retrieves a blob of data associated with a contract
@@ -346,10 +349,11 @@ func (bc *BlockChain) ContractCode(hash common.Hash) ([]byte, error) {
 // new code scheme.
 func (bc *BlockChain) ContractCodeWithPrefix(hash common.Hash) ([]byte, error) {
 	type codeReader interface {
-		ContractCodeWithPrefix(addrHash, codeHash common.Hash) ([]byte, error)
+		ContractCodeWithPrefix(address common.Address, codeHash common.Hash) ([]byte, error)
 	}
-
-	return bc.stateCache.(codeReader).ContractCodeWithPrefix(common.Hash{}, hash)
+	// TODO(rjl493456442) The associated account address is also required
+	// in Verkle scheme. Fix it once snap-sync is supported for Verkle.
+	return bc.stateCache.(codeReader).ContractCodeWithPrefix(common.Address{}, hash)
 }
 
 // State returns a new mutable state based on the current HEAD block.

@@ -26,10 +26,10 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
-	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -44,6 +44,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 var (
@@ -91,7 +92,7 @@ func setupMiner(t *testing.T, n int, genesis *core.Genesis) ([]*node.Node, []*et
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
 		if err != nil {
-			t.Fatal("Error occured while initialising miner", "error", err)
+			t.Fatal("Error occurred while initialising miner", "error", err)
 		}
 
 		for stack.Server().NodeInfo().Ports.Listener == 0 {
@@ -127,14 +128,14 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 		BorLogs: true,
 	}
 
-	ethConf.Genesis.MustCommit(db)
+	ethConf.Genesis.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	ethereum := utils.CreateBorEthereum(ethConf)
 	if err != nil {
 		t.Fatalf("failed to register Ethereum protocol: %v", err)
 	}
 
-	ethConf.Genesis.MustCommit(ethereum.ChainDb())
+	ethConf.Genesis.MustCommit(ethereum.ChainDb(), trie.NewDatabase(ethereum.ChainDb(), trie.HashDefaults))
 
 	ethereum.Engine().(*bor.Bor).Authorize(addr, func(account accounts.Account, s string, data []byte) ([]byte, error) {
 		return crypto.Sign(crypto.Keccak256(data), key)
@@ -195,7 +196,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	}
 
 	if chain.Config().IsLondon(header.Number) {
-		header.BaseFee = misc.CalcBaseFee(chain.Config(), parentBlock.Header())
+		header.BaseFee = eip1559.CalcBaseFee(chain.Config(), parentBlock.Header())
 
 		if !chain.Config().IsLondon(parentBlock.Number()) {
 			parentGasLimit := parentBlock.GasLimit() * params.ElasticityMultiplier
@@ -227,7 +228,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	}
 
 	// Write state changes to db
-	root, err := state.Commit(chain.Config().IsEIP158(b.header.Number))
+	root, err := state.Commit(block.NumberU64(), chain.Config().IsEIP158(b.header.Number))
 	if err != nil {
 		panic(fmt.Sprintf("state write error: %v", err))
 	}
@@ -472,9 +473,8 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 		SyncMode:        downloader.FullSync,
 		DatabaseCache:   256,
 		DatabaseHandles: 256,
-		TxPool:          txpool.DefaultConfig,
+		TxPool:          legacypool.DefaultConfig,
 		GPO:             ethconfig.Defaults.GPO,
-		Ethash:          ethconfig.Defaults.Ethash,
 		Miner: miner.Config{
 			Etherbase: crypto.PubkeyToAddress(privKey.PublicKey),
 			GasCeil:   genesis.GasLimit * 11 / 10,

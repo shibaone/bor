@@ -17,7 +17,6 @@
 package t8ntool
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
@@ -31,42 +30,45 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus/clique"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
 //go:generate go run github.com/fjl/gencodec -type header -field-override headerMarshaling -out gen_header.go
 type header struct {
-	ParentHash      common.Hash       `json:"parentHash"`
-	OmmerHash       *common.Hash      `json:"sha3Uncles"`
-	Coinbase        *common.Address   `json:"miner"`
-	Root            common.Hash       `json:"stateRoot"        gencodec:"required"`
-	TxHash          *common.Hash      `json:"transactionsRoot"`
-	ReceiptHash     *common.Hash      `json:"receiptsRoot"`
-	Bloom           types.Bloom       `json:"logsBloom"`
-	Difficulty      *big.Int          `json:"difficulty"`
-	Number          *big.Int          `json:"number"           gencodec:"required"`
-	GasLimit        uint64            `json:"gasLimit"         gencodec:"required"`
-	GasUsed         uint64            `json:"gasUsed"`
-	Time            uint64            `json:"timestamp"        gencodec:"required"`
-	Extra           []byte            `json:"extraData"`
-	MixDigest       common.Hash       `json:"mixHash"`
-	Nonce           *types.BlockNonce `json:"nonce"`
-	BaseFee         *big.Int          `json:"baseFeePerGas" rlp:"optional"`
-	WithdrawalsHash *common.Hash      `json:"withdrawalsRoot" rlp:"optional"`
+	ParentHash            common.Hash       `json:"parentHash"`
+	OmmerHash             *common.Hash      `json:"sha3Uncles"`
+	Coinbase              *common.Address   `json:"miner"`
+	Root                  common.Hash       `json:"stateRoot"        gencodec:"required"`
+	TxHash                *common.Hash      `json:"transactionsRoot"`
+	ReceiptHash           *common.Hash      `json:"receiptsRoot"`
+	Bloom                 types.Bloom       `json:"logsBloom"`
+	Difficulty            *big.Int          `json:"difficulty"`
+	Number                *big.Int          `json:"number"           gencodec:"required"`
+	GasLimit              uint64            `json:"gasLimit"         gencodec:"required"`
+	GasUsed               uint64            `json:"gasUsed"`
+	Time                  uint64            `json:"timestamp"        gencodec:"required"`
+	Extra                 []byte            `json:"extraData"`
+	MixDigest             common.Hash       `json:"mixHash"`
+	Nonce                 *types.BlockNonce `json:"nonce"`
+	BaseFee               *big.Int          `json:"baseFeePerGas" rlp:"optional"`
+	WithdrawalsHash       *common.Hash      `json:"withdrawalsRoot" rlp:"optional"`
+	BlobGasUsed           *uint64           `json:"blobGasUsed"   rlp:"optional"`
+	ExcessBlobGas         *uint64           `json:"excessBlobGas"   rlp:"optional"`
+	ParentBeaconBlockRoot *common.Hash      `json:"parentBeaconBlockRoot" rlp:"optional"`
 }
 
 type headerMarshaling struct {
-	Difficulty *math.HexOrDecimal256
-	Number     *math.HexOrDecimal256
-	GasLimit   math.HexOrDecimal64
-	GasUsed    math.HexOrDecimal64
-	Time       math.HexOrDecimal64
-	Extra      hexutil.Bytes
-	BaseFee    *math.HexOrDecimal256
+	Difficulty    *math.HexOrDecimal256
+	Number        *math.HexOrDecimal256
+	GasLimit      math.HexOrDecimal64
+	GasUsed       math.HexOrDecimal64
+	Time          math.HexOrDecimal64
+	Extra         hexutil.Bytes
+	BaseFee       *math.HexOrDecimal256
+	BlobGasUsed   *math.HexOrDecimal64
+	ExcessBlobGas *math.HexOrDecimal64
 }
 
 type bbInput struct {
@@ -76,11 +78,9 @@ type bbInput struct {
 	Withdrawals []*types.Withdrawal `json:"withdrawals,omitempty"`
 	Clique      *cliqueInput        `json:"clique,omitempty"`
 
-	Ethash    bool                 `json:"-"`
-	EthashDir string               `json:"-"`
-	PowMode   ethash.Mode          `json:"-"`
-	Txs       []*types.Transaction `json:"-"`
-	Ommers    []*types.Header      `json:"-"`
+	Ethash bool                 `json:"-"`
+	Txs    []*types.Transaction `json:"-"`
+	Ommers []*types.Header      `json:"-"`
 }
 
 type cliqueInput struct {
@@ -123,22 +123,25 @@ func (c *cliqueInput) UnmarshalJSON(input []byte) error {
 // ToBlock converts i into a *types.Block
 func (i *bbInput) ToBlock() *types.Block {
 	header := &types.Header{
-		ParentHash:      i.Header.ParentHash,
-		UncleHash:       types.EmptyUncleHash,
-		Coinbase:        common.Address{},
-		Root:            i.Header.Root,
-		TxHash:          types.EmptyTxsHash,
-		ReceiptHash:     types.EmptyReceiptsHash,
-		Bloom:           i.Header.Bloom,
-		Difficulty:      common.Big0,
-		Number:          i.Header.Number,
-		GasLimit:        i.Header.GasLimit,
-		GasUsed:         i.Header.GasUsed,
-		Time:            i.Header.Time,
-		Extra:           i.Header.Extra,
-		MixDigest:       i.Header.MixDigest,
-		BaseFee:         i.Header.BaseFee,
-		WithdrawalsHash: i.Header.WithdrawalsHash,
+		ParentHash:       i.Header.ParentHash,
+		UncleHash:        types.EmptyUncleHash,
+		Coinbase:         common.Address{},
+		Root:             i.Header.Root,
+		TxHash:           types.EmptyTxsHash,
+		ReceiptHash:      types.EmptyReceiptsHash,
+		Bloom:            i.Header.Bloom,
+		Difficulty:       common.Big0,
+		Number:           i.Header.Number,
+		GasLimit:         i.Header.GasLimit,
+		GasUsed:          i.Header.GasUsed,
+		Time:             i.Header.Time,
+		Extra:            i.Header.Extra,
+		MixDigest:        i.Header.MixDigest,
+		BaseFee:          i.Header.BaseFee,
+		WithdrawalsHash:  i.Header.WithdrawalsHash,
+		BlobGasUsed:      i.Header.BlobGasUsed,
+		ExcessBlobGas:    i.Header.ExcessBlobGas,
+		ParentBeaconRoot: i.Header.ParentBeaconBlockRoot,
 	}
 
 	// Fill optional values.
@@ -164,8 +167,7 @@ func (i *bbInput) ToBlock() *types.Block {
 	if i.Header.Nonce != nil {
 		header.Nonce = *i.Header.Nonce
 	}
-
-	if header.Difficulty != nil {
+	if i.Header.Difficulty != nil {
 		header.Difficulty = i.Header.Difficulty
 	}
 
@@ -175,8 +177,6 @@ func (i *bbInput) ToBlock() *types.Block {
 // SealBlock seals the given block using the configured engine.
 func (i *bbInput) SealBlock(block *types.Block) (*types.Block, error) {
 	switch {
-	case i.Ethash:
-		return i.sealEthash(block)
 	case i.Clique != nil:
 		return i.sealClique(block)
 	default:
@@ -184,50 +184,19 @@ func (i *bbInput) SealBlock(block *types.Block) (*types.Block, error) {
 	}
 }
 
-// sealEthash seals the given block using ethash.
-func (i *bbInput) sealEthash(block *types.Block) (*types.Block, error) {
-	if i.Header.Nonce != nil {
-		return nil, NewError(ErrorConfig, fmt.Errorf("sealing with ethash will overwrite provided nonce"))
-	}
-
-	ethashConfig := ethash.Config{
-		PowMode:        i.PowMode,
-		DatasetDir:     i.EthashDir,
-		CacheDir:       i.EthashDir,
-		DatasetsInMem:  1,
-		DatasetsOnDisk: 2,
-		CachesInMem:    2,
-		CachesOnDisk:   3,
-	}
-
-	engine := ethash.New(ethashConfig, nil, true)
-	defer engine.Close()
-	// Use a buffered chan for results.
-	// If the testmode is used, the sealer will return quickly, and complain
-	// "Sealing result is not read by miner" if it cannot write the result.
-	results := make(chan *types.Block, 1)
-	if err := engine.Seal(context.Background(), nil, block, results, nil); err != nil {
-		panic(fmt.Sprintf("failed to seal block: %v", err))
-	}
-
-	found := <-results
-
-	return block.WithSeal(found.Header()), nil
-}
-
 // sealClique seals the given block using clique.
 func (i *bbInput) sealClique(block *types.Block) (*types.Block, error) {
 	// If any clique value overwrites an explicit header value, fail
 	// to avoid silently building a block with unexpected values.
 	if i.Header.Extra != nil {
-		return nil, NewError(ErrorConfig, fmt.Errorf("sealing with clique will overwrite provided extra data"))
+		return nil, NewError(ErrorConfig, errors.New("sealing with clique will overwrite provided extra data"))
 	}
 
 	header := block.Header()
 
 	if i.Clique.Voted != nil {
 		if i.Header.Coinbase != nil {
-			return nil, NewError(ErrorConfig, fmt.Errorf("sealing with clique and voting will overwrite provided coinbase"))
+			return nil, NewError(ErrorConfig, errors.New("sealing with clique and voting will overwrite provided coinbase"))
 		}
 
 		header.Coinbase = *i.Clique.Voted
@@ -235,7 +204,7 @@ func (i *bbInput) sealClique(block *types.Block) (*types.Block, error) {
 
 	if i.Clique.Authorize != nil {
 		if i.Header.Nonce != nil {
-			return nil, NewError(ErrorConfig, fmt.Errorf("sealing with clique and voting will overwrite provided nonce"))
+			return nil, NewError(ErrorConfig, errors.New("sealing with clique and voting will overwrite provided nonce"))
 		}
 
 		if *i.Clique.Authorize {
@@ -264,11 +233,6 @@ func (i *bbInput) sealClique(block *types.Block) (*types.Block, error) {
 
 // BuildBlock constructs a block from the given inputs.
 func BuildBlock(ctx *cli.Context) error {
-	// Configure the go-ethereum logger
-	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
-	glogger.Verbosity(log.Lvl(ctx.Int(VerbosityFlag.Name)))
-	log.Root().SetHandler(glogger)
-
 	baseDir, err := createBasedir(ctx)
 	if err != nil {
 		return NewError(ErrorIO, fmt.Errorf("failed creating output basedir: %v", err))
@@ -296,32 +260,8 @@ func readInput(ctx *cli.Context) (*bbInput, error) {
 		withdrawalsStr = ctx.String(InputWithdrawalsFlag.Name)
 		txsStr         = ctx.String(InputTxsRlpFlag.Name)
 		cliqueStr      = ctx.String(SealCliqueFlag.Name)
-		ethashOn       = ctx.Bool(SealEthashFlag.Name)
-		ethashDir      = ctx.String(SealEthashDirFlag.Name)
-		ethashMode     = ctx.String(SealEthashModeFlag.Name)
 		inputData      = &bbInput{}
 	)
-
-	if ethashOn && cliqueStr != "" {
-		return nil, NewError(ErrorConfig, fmt.Errorf("both ethash and clique sealing specified, only one may be chosen"))
-	}
-
-	if ethashOn {
-		inputData.Ethash = ethashOn
-		inputData.EthashDir = ethashDir
-
-		switch ethashMode {
-		case "normal":
-			inputData.PowMode = ethash.ModeNormal
-		case "test":
-			inputData.PowMode = ethash.ModeTest
-		case "fake":
-			inputData.PowMode = ethash.ModeFake
-		default:
-			return nil, NewError(ErrorConfig, fmt.Errorf("unknown pow mode: %s, supported modes: test, fake, normal", ethashMode))
-		}
-	}
-
 	if headerStr == stdinSelector || ommersStr == stdinSelector || txsStr == stdinSelector || cliqueStr == stdinSelector {
 		decoder := json.NewDecoder(os.Stdin)
 		if err := decoder.Decode(inputData); err != nil {
@@ -407,7 +347,7 @@ func readInput(ctx *cli.Context) (*bbInput, error) {
 	return inputData, nil
 }
 
-// dispatchOutput writes the output data to either stderr or stdout, or to the specified
+// dispatchBlock writes the output data to either stderr or stdout, or to the specified
 // files
 func dispatchBlock(ctx *cli.Context, baseDir string, block *types.Block) error {
 	raw, _ := rlp.EncodeToBytes(block)

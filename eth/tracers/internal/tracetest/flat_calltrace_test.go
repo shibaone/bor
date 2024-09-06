@@ -90,8 +90,7 @@ func flatCallTracerTestRunner(tb testing.TB, tracerName string, filename string,
 	if err := rlp.DecodeBytes(common.FromHex(test.Input), tx); err != nil {
 		return fmt.Errorf("failed to parse testcase input: %v", err)
 	}
-
-	signer := types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)))
+	signer := types.MakeSigner(test.Genesis.Config, new(big.Int).SetUint64(uint64(test.Context.Number)), uint64(test.Context.Time))
 	origin, _ := signer.Sender(tx)
 	txContext := vm.TxContext{
 		Origin:   origin,
@@ -106,7 +105,8 @@ func flatCallTracerTestRunner(tb testing.TB, tracerName string, filename string,
 		Difficulty:  (*big.Int)(test.Context.Difficulty),
 		GasLimit:    uint64(test.Context.GasLimit),
 	}
-	_, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false)
+	triedb, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(), test.Genesis.Alloc, false, rawdb.HashScheme)
+	defer triedb.Close()
 
 	// Create the tracer, the EVM environment and run it
 	tracer, err := tracers.DefaultDirectory.New(tracerName, new(tracers.Context), test.TracerConfig)

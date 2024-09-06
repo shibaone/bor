@@ -54,11 +54,11 @@ var (
 	reorgProtThreshold   = 48 // Threshold number of recent blocks to disable mini reorg protection
 	reorgProtHeaderDelay = 2  // Number of headers to delay delivering to cover mini reorgs
 
-	fsHeaderCheckFrequency = 100             // Verification frequency of the downloaded headers during snap sync
-	fsHeaderSafetyNet      = 2048            // Number of headers to discard in case a chain violation is detected
-	fsHeaderForceVerify    = 24              // Number of headers to verify before and after the pivot to accept it
-	fsHeaderContCheck      = 3 * time.Second // Time interval to check for header continuations during state download
-	fsMinFullBlocks        = 64              // Number of blocks to retrieve fully even in snap sync
+	fsHeaderSafetyNet = 2048            // Number of headers to discard in case a chain violation is detected
+	fsHeaderContCheck = 3 * time.Second // Time interval to check for header continuations during state download
+	fsMinFullBlocks   = 64              // Number of blocks to retrieve fully even in snap sync
+
+	maxValidationThreshold = uint64(1024) // Number of block difference from remote peer to start validation
 )
 
 var (
@@ -102,10 +102,9 @@ type Downloader struct {
 	mode atomic.Uint32  // Synchronisation mode defining the strategy used (per sync cycle), use d.getMode() to get the SyncMode
 	mux  *event.TypeMux // Event multiplexer to announce sync operation events
 
-	checkpoint uint64   // Checkpoint block number to enforce head against (e.g. snap sync)
-	genesis    uint64   // Genesis block number to limit sync to (e.g. light client CHT)
-	queue      *queue   // Scheduler for selecting the hashes to download
-	peers      *peerSet // Set of active peers from which download can proceed
+	genesis uint64   // Genesis block number to limit sync to (e.g. light client CHT)
+	queue   *queue   // Scheduler for selecting the hashes to download
+	peers   *peerSet // Set of active peers from which download can proceed
 
 	stateDB ethdb.Database // Database to state sync into (and deduplicate via)
 
@@ -150,7 +149,9 @@ type Downloader struct {
 	quitCh   chan struct{} // Quit channel to signal termination
 	quitLock sync.Mutex    // Lock to prevent double closes
 
+	// Validation
 	ethereum.ChainValidator
+	maxValidationThreshold uint64 // Number of block difference from remote peer to start validation
 
 	// Testing hooks
 	syncInitHook     func(uint64, uint64)  // Method to call upon initiating a new sync run
@@ -179,7 +180,7 @@ type LightChain interface {
 	GetTd(common.Hash, uint64) *big.Int
 
 	// InsertHeaderChain inserts a batch of headers into the local chain.
-	InsertHeaderChain([]*types.Header, int) (int, error)
+	InsertHeaderChain([]*types.Header) (int, error)
 
 	// SetHead rewinds the local chain to a new head.
 	SetHead(uint64) error
@@ -225,26 +226,26 @@ type BlockChain interface {
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 // nolint: staticcheck
-func New(checkpoint uint64, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator) *Downloader {
+func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}
 
 	dl := &Downloader{
-		stateDB:        stateDb,
-		mux:            mux,
-		checkpoint:     checkpoint,
-		queue:          newQueue(blockCacheMaxItems, blockCacheInitialItems),
-		peers:          newPeerSet(),
-		blockchain:     chain,
-		lightchain:     lightchain,
-		dropPeer:       dropPeer,
-		headerProcCh:   make(chan *headerTask, 1),
-		quitCh:         make(chan struct{}),
-		SnapSyncer:     snap.NewSyncer(stateDb, chain.TrieDB().Scheme()),
-		stateSyncStart: make(chan *stateSync),
-		syncStartBlock: chain.CurrentSnapBlock().Number.Uint64(),
-		ChainValidator: whitelistService,
+		stateDB:                stateDb,
+		mux:                    mux,
+		queue:                  newQueue(blockCacheMaxItems, blockCacheInitialItems),
+		peers:                  newPeerSet(),
+		blockchain:             chain,
+		lightchain:             lightchain,
+		dropPeer:               dropPeer,
+		headerProcCh:           make(chan *headerTask, 1),
+		quitCh:                 make(chan struct{}),
+		SnapSyncer:             snap.NewSyncer(stateDb, chain.TrieDB().Scheme()),
+		stateSyncStart:         make(chan *stateSync),
+		syncStartBlock:         chain.CurrentSnapBlock().Number.Uint64(),
+		ChainValidator:         whitelistService,
+		maxValidationThreshold: maxValidationThreshold,
 	}
 	// Create the post-merge skeleton syncer and start the process
 	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success))
@@ -301,11 +302,6 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 	}
 }
 
-// Synchronising returns whether the downloader is currently retrieving blocks.
-func (d *Downloader) Synchronising() bool {
-	return d.synchronising.Load()
-}
-
 // RegisterPeer injects a new download peer into the set of block source to be
 // used for fetching hashes and blocks from.
 func (d *Downloader) RegisterPeer(id string, version uint, peer Peer) error {
@@ -325,11 +321,6 @@ func (d *Downloader) RegisterPeer(id string, version uint, peer Peer) error {
 	}
 
 	return nil
-}
-
-// RegisterLightPeer injects a light client peer, wrapping it so it appears as a regular peer.
-func (d *Downloader) RegisterLightPeer(id string, version uint, peer LightPeer) error {
-	return d.RegisterPeer(id, version, &lightPeerWrapper{peer})
 }
 
 // UnregisterPeer remove a peer from the known list, preventing any action from
@@ -432,7 +423,16 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, 
 	}
 
 	if mode == SnapSync {
-		// Snap sync uses the snapshot namespace to store potentially flakey data until
+		// Snap sync will directly modify the persistent state, making the entire
+		// trie database unusable until the state is fully synced. To prevent any
+		// subsequent state reads, explicitly disable the trie database and state
+		// syncer is responsible to address and correct any state missing.
+		if d.blockchain.TrieDB().Scheme() == rawdb.PathScheme {
+			if err := d.blockchain.TrieDB().Disable(); err != nil {
+				return err
+			}
+		}
+		// Snap sync uses the snapshot namespace to store potentially flaky data until
 		// sync completely heals and finishes. Pause snapshot maintenance in the mean-
 		// time to prevent access.
 		if snapshots := d.blockchain.Snapshots(); snapshots != nil { // Only nil in tests
@@ -512,7 +512,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	}
 
 	defer func(start time.Time) {
-		log.Debug("Synchronisation terminated", "elapsed", common.PrettyDuration(time.Since(start)))
+		log.Debug("Synchronisation terminated", "elapsed", common.PrettyDuration(time.Since(start)), "err", err)
 	}(time.Now())
 
 	// Look up the sync boundaries: the common ancestor and the target block
@@ -625,7 +625,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		// For non-merged networks, if there is a checkpoint available, then calculate
 		// the ancientLimit through that. Otherwise calculate the ancient limit through
 		// the advertised height of the remote peer. This most is mostly a fallback for
-		// legacy networks, but should eventually be droppped. TODO(karalabe).
+		// legacy networks, but should eventually be dropped. TODO(karalabe).
 		if beaconMode {
 			// Beacon sync, use the latest finalized block as the ancient limit
 			// or a reasonable height if no finalized block is yet announced.
@@ -637,18 +637,16 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 				d.ancientLimit = 0
 			}
 		} else {
-			// Legacy sync, use any hardcoded checkpoints or the best announcement
-			// we have from the remote peer. TODO(karalabe): Drop this pathway.
-			if d.checkpoint != 0 && d.checkpoint > fullMaxForkAncestry+1 {
-				d.ancientLimit = d.checkpoint
-			} else if height > fullMaxForkAncestry+1 {
+			// Legacy sync, use the best announcement we have from the remote peer.
+			// TODO(karalabe): Drop this pathway.
+			if height > fullMaxForkAncestry+1 {
 				d.ancientLimit = height - fullMaxForkAncestry - 1
 			} else {
 				d.ancientLimit = 0
 			}
 		}
 
-		frozen, _ := d.stateDB.Ancients() // Ignore the error here since light client can also hit here.
+		frozen, _ := d.stateDB.ItemAmountInAncient() // Ignore the error here since light client can also hit here.
 
 		// If a part of blockchain data has already been written into active store,
 		// disable the ancient style insertion explicitly.
@@ -723,9 +721,11 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 			// it has processed the queue.
 			d.queue.Close()
 		}
-
-		if err = <-errc; err != nil && err != errCanceled {
-			break
+		if got := <-errc; got != nil {
+			err = got
+			if got != errCanceled {
+				break // receive a meaningful error, bubble it up
+			}
 		}
 	}
 	d.queue.Close()
@@ -801,14 +801,10 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, pivot *ty
 	if len(headers) == 0 || len(headers) > fetch {
 		return nil, nil, fmt.Errorf("%w: returned headers %d != requested %d", errBadPeer, len(headers), fetch)
 	}
-	// The first header needs to be the head, validate against the checkpoint
-	// and request. If only 1 header was returned, make sure there's no pivot
-	// or there was not one requested.
+	// The first header needs to be the head, validate against the request. If
+	// only 1 header was returned, make sure there's no pivot or there was not
+	// one requested.
 	head = headers[0]
-	if (mode == SnapSync || mode == LightSync) && head.Number.Uint64() < d.checkpoint {
-		return nil, nil, fmt.Errorf("%w: remote head %d below checkpoint %d", errUnsyncedPeer, head.Number, d.checkpoint)
-	}
-
 	if len(headers) == 1 {
 		if mode == SnapSync && head.Number.Uint64() > uint64(fsMinFullBlocks) {
 			return nil, nil, fmt.Errorf("%w: no pivot included along head header", errBadPeer)
@@ -902,14 +898,6 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // In the rare scenario when we ended up on a long reorganisation (i.e. none of
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
-
-	// Check the validity of peer from which the chain is to be downloaded
-	if d.ChainValidator != nil {
-		if _, err := d.IsValidPeer(d.getFetchHeadersByNumber(p)); err != nil {
-			return 0, err
-		}
-	}
-
 	// Figure out the valid ancestor range to prevent rewrite attacks
 	var (
 		floor        = int64(-1)
@@ -925,6 +913,25 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 		localHeight = d.blockchain.CurrentSnapBlock().Number.Uint64()
 	default:
 		localHeight = d.lightchain.CurrentHeader().Number.Uint64()
+	}
+
+	// Check the validity of peer from which the chain is to be downloaded
+	if d.ChainValidator != nil {
+		_, err := d.IsValidPeer(d.getFetchHeadersByNumber(p))
+		if errors.Is(err, whitelist.ErrMismatch) {
+			return 0, err
+		}
+
+		if errors.Is(err, whitelist.ErrNoRemote) {
+			// Don't validate the peer against whitelisted milestones until the different of
+			// our local height and remote peer's height is less than `maxValidationThreshold`
+			if localHeight >= remoteHeight-d.maxValidationThreshold {
+				log.Info("Remote peer didn't respond", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
+				return 0, err
+			}
+
+			log.Info("Remote peer didn't respond but is far ahead, skipping validation", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
+		}
 	}
 
 	p.log.Debug("Looking for common ancestor", "local", localHeight, "remote", remoteHeight)
@@ -1402,45 +1409,13 @@ func (d *Downloader) fetchReceipts(from uint64, beaconMode bool) error {
 // keeps processing and scheduling them into the header chain and downloader's
 // queue until the stream ends or a failure occurs.
 func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode bool) error {
-	// Keep a count of uncertain headers to roll back
 	var (
-		rollback    uint64 // Zero means no rollback (fine as you can't unroll the genesis)
-		rollbackErr error
-		mode        = d.getMode()
+		mode       = d.getMode()
+		gotHeaders = false // Wait for batches of headers to process
 	)
-
-	defer func() {
-		if rollback > 0 {
-			lastHeader, lastFastBlock, lastBlock := d.lightchain.CurrentHeader().Number, common.Big0, common.Big0
-			if mode != LightSync {
-				lastFastBlock = d.blockchain.CurrentSnapBlock().Number
-				lastBlock = d.blockchain.CurrentBlock().Number
-			}
-
-			if err := d.lightchain.SetHead(rollback - 1); err != nil { // -1 to target the parent of the first uncertain block
-				// We're already unwinding the stack, only print the error to make it more visible
-				log.Error("Failed to roll back chain segment", "head", rollback-1, "err", err)
-			}
-
-			curFastBlock, curBlock := common.Big0, common.Big0
-			if mode != LightSync {
-				curFastBlock = d.blockchain.CurrentSnapBlock().Number
-				curBlock = d.blockchain.CurrentBlock().Number
-			}
-
-			log.Warn("Rolled back chain segment",
-				"header", fmt.Sprintf("%d->%d", lastHeader, d.lightchain.CurrentHeader().Number),
-				"snap", fmt.Sprintf("%d->%d", lastFastBlock, curFastBlock),
-				"block", fmt.Sprintf("%d->%d", lastBlock, curBlock), "reason", rollbackErr)
-		}
-	}()
-	// Wait for batches of headers to process
-	gotHeaders := false
-
 	for {
 		select {
 		case <-d.cancelCh:
-			rollbackErr = errCanceled
 			return errCanceled
 
 		case task := <-d.headerProcCh:
@@ -1489,9 +1464,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 						}
 					}
 				}
-				// Disable any rollback and return
-				rollback = 0
-
 				return nil
 			}
 			// Otherwise split the chunk of headers into batches and process them
@@ -1503,7 +1475,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 				// Terminate if something failed in between processing chunks
 				select {
 				case <-d.cancelCh:
-					rollbackErr = errCanceled
 					return errCanceled
 				default:
 				}
@@ -1518,19 +1489,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 
 				// In case of header only syncing, validate the chunk immediately
 				if mode == SnapSync || mode == LightSync {
-					// If we're importing pure headers, verify based on their recentness
-					var pivot uint64
-
-					d.pivotLock.RLock()
-					if d.pivotHeader != nil {
-						pivot = d.pivotHeader.Number.Uint64()
-					}
-					d.pivotLock.RUnlock()
-
-					frequency := fsHeaderCheckFrequency
-					if chunkHeaders[len(chunkHeaders)-1].Number.Uint64()+uint64(fsHeaderForceVerify) > pivot {
-						frequency = 1
-					}
 					// Although the received headers might be all valid, a legacy
 					// PoW/PoA sync must not accept post-merge headers. Make sure
 					// that any transition is rejected at this point.
@@ -1567,33 +1525,14 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					}
 
 					if len(chunkHeaders) > 0 {
-						if n, err := d.lightchain.InsertHeaderChain(chunkHeaders, frequency); err != nil {
-							rollbackErr = err
-
-							// If some headers were inserted, track them as uncertain
-							if (mode == SnapSync || frequency > 1) && n > 0 && rollback == 0 {
-								rollback = chunkHeaders[0].Number.Uint64()
-							}
-
+						if n, err := d.lightchain.InsertHeaderChain(chunkHeaders); err != nil {
 							log.Warn("Invalid header encountered", "number", chunkHeaders[n].Number, "hash", chunkHashes[n], "parent", chunkHeaders[n].ParentHash, "err", err)
 
 							return fmt.Errorf("%w: %v", errInvalidChain, err)
 						}
-						// All verifications passed, track all headers within the allowed limits
-						if mode == SnapSync {
-							head := chunkHeaders[len(chunkHeaders)-1].Number.Uint64()
-							if head-rollback > uint64(fsHeaderSafetyNet) {
-								rollback = head - uint64(fsHeaderSafetyNet)
-							} else {
-								rollback = 1
-							}
-						}
 					}
 
 					if len(rejected) != 0 {
-						// Merge threshold reached, stop importing, but don't roll back
-						rollback = 0
-
 						log.Info("Legacy sync reached merge threshold", "number", rejected[0].Number, "hash", rejected[0].Hash(), "td", td, "ttd", ttd)
 
 						return ErrMergeTransition
@@ -1605,7 +1544,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					for d.queue.PendingBodies() >= maxQueuedHeaders || d.queue.PendingReceipts() >= maxQueuedHeaders {
 						select {
 						case <-d.cancelCh:
-							rollbackErr = errCanceled
 							return errCanceled
 						case <-time.After(time.Second):
 						}
@@ -1613,7 +1551,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					// Otherwise insert the headers for content retrieval
 					inserts := d.queue.Schedule(chunkHeaders, chunkHashes, origin)
 					if len(inserts) != len(chunkHeaders) {
-						rollbackErr = fmt.Errorf("stale headers: len inserts %v len(chunk) %v", len(inserts), len(chunkHeaders))
 						return fmt.Errorf("%w: stale headers", errBadPeer)
 					}
 				}
@@ -1779,18 +1716,31 @@ func (d *Downloader) processSnapSyncContent() error {
 
 	// To cater for moving pivot points, track the pivot block and subsequently
 	// accumulated download results separately.
+	//
+	// These will be nil up to the point where we reach the pivot, and will only
+	// be set temporarily if the synced blocks are piling up, but the pivot is
+	// still busy downloading. In that case, we need to occasionally check for
+	// pivot moves, so need to unblock the loop. These fields will accumulate
+	// the results in the meantime.
+	//
+	// Note, there's no issue with memory piling up since after 64 blocks the
+	// pivot will forcefully move so these accumulators will be dropped.
 	var (
 		oldPivot *fetchResult   // Locked in pivot block, might change eventually
 		oldTail  []*fetchResult // Downloaded content after the pivot
 	)
 
 	for {
-		// Wait for the next batch of downloaded data to be available, and if the pivot
-		// block became stale, move the goalpost
-		results := d.queue.Results(oldPivot == nil) // Block if we're not monitoring pivot staleness
+		// Wait for the next batch of downloaded data to be available. If we have
+		// not yet reached the pivot point, wait blockingly as there's no need to
+		// spin-loop check for pivot moves. If we reached the pivot but have not
+		// yet processed it, check for results async, so we might notice pivot
+		// moves while state syncing. If the pivot was passed fully, block again
+		// as there's no more reason to check for pivot moves at all.
+		results := d.queue.Results(oldPivot == nil)
 		if len(results) == 0 {
 			// If pivot sync is done, stop
-			if oldPivot == nil {
+			if d.committed.Load() {
 				d.reportSnapSyncProgress(true)
 				return sync.Cancel()
 			}
@@ -1815,21 +1765,23 @@ func (d *Downloader) processSnapSyncContent() error {
 		pivot := d.pivotHeader
 		d.pivotLock.RUnlock()
 
-		if oldPivot == nil {
-			if pivot.Root != sync.root {
-				sync.Cancel()
-				sync = d.syncState(pivot.Root)
+		if oldPivot == nil { // no results piling up, we can move the pivot
+			if !d.committed.Load() { // not yet passed the pivot, we can move the pivot
+				if pivot.Root != sync.root { // pivot position changed, we can move the pivot
+					sync.Cancel()
+					sync = d.syncState(pivot.Root)
 
-				go closeOnErr(sync)
+					go closeOnErr(sync)
+				}
 			}
-		} else {
+		} else { // results already piled up, consume before handling pivot move
 			results = append(append([]*fetchResult{oldPivot}, oldTail...), results...)
 		}
 		// Split around the pivot block and process the two sides via snap/full sync
 		if !d.committed.Load() {
 			latest := results[len(results)-1].Header
 			// If the height is above the pivot block by 2 sets, it means the pivot
-			// become stale in the network and it was garbage collected, move to a
+			// become stale in the network, and it was garbage collected, move to a
 			// new pivot.
 			//
 			// Note, we have `reorgProtHeaderDelay` number of blocks withheld, Those

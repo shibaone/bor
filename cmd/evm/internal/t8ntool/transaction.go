@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests"
@@ -71,11 +70,6 @@ func (r *result) MarshalJSON() ([]byte, error) {
 }
 
 func Transaction(ctx *cli.Context) error {
-	// Configure the go-ethereum logger
-	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
-	glogger.Verbosity(log.Lvl(ctx.Int(VerbosityFlag.Name)))
-	log.Root().SetHandler(glogger)
-
 	var (
 		err error
 	)
@@ -122,8 +116,7 @@ func Transaction(ctx *cli.Context) error {
 			return NewError(ErrorIO, errors.New("only rlp supported"))
 		}
 	}
-
-	signer := types.MakeSigner(chainConfig, new(big.Int))
+	signer := types.MakeSigner(chainConfig, new(big.Int), 0)
 	// We now have the transactions in 'body', which is supposed to be an
 	// rlp list of transactions
 	it, err := rlp.NewListIterator([]byte(body))

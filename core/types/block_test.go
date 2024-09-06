@@ -18,7 +18,6 @@ package types
 
 import (
 	"bytes"
-	"hash"
 	"math/big"
 	"reflect"
 	"testing"
@@ -26,10 +25,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/internal/blocktest"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"golang.org/x/crypto/sha3"
 )
 
 // from bcValidBlockTest.json, "SimpleTx"
@@ -75,7 +74,6 @@ func TestBlockEncoding(t *testing.T) {
 }
 
 // This is a replica of `(h *Header) GetValidatorBytes` function
-// This was needed because currently, `IsParallelUniverse` will always return false.
 func GetValidatorBytesTest(h *Header) []byte {
 	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
 		log.Error("length of extra less is than vanity and seal")
@@ -329,32 +327,6 @@ func BenchmarkEncodeBlock(b *testing.B) {
 	}
 }
 
-// testHasher is the helper tool for transaction/receipt list hashing.
-// The original hasher is trie, in order to get rid of import cycle,
-// use the testing hasher instead.
-type testHasher struct {
-	hasher hash.Hash
-}
-
-func newHasher() *testHasher {
-	return &testHasher{hasher: sha3.NewLegacyKeccak256()}
-}
-
-func (h *testHasher) Reset() {
-	h.hasher.Reset()
-}
-
-func (h *testHasher) Update(key, val []byte) error {
-	h.hasher.Write(key)
-	h.hasher.Write(val)
-
-	return nil
-}
-
-func (h *testHasher) Hash() common.Hash {
-	return common.BytesToHash(h.hasher.Sum(nil))
-}
-
 func makeBenchBlock() *Block {
 	var (
 		key, _   = crypto.GenerateKey()
@@ -398,8 +370,7 @@ func makeBenchBlock() *Block {
 			Extra:      []byte("benchmark uncle"),
 		}
 	}
-
-	return NewBlock(header, txs, uncles, receipts, newHasher())
+	return NewBlock(header, txs, uncles, receipts, blocktest.NewHasher())
 }
 
 func TestRlpDecodeParentHash(t *testing.T) {
@@ -464,7 +435,7 @@ func TestRlpDecodeParentHash(t *testing.T) {
 	}
 }
 
-func TestValidateBlockNumberOptions4337(t *testing.T) {
+func TestValidateBlockNumberOptionsPIP15(t *testing.T) {
 	t.Parallel()
 
 	testsPass := []struct {
@@ -532,19 +503,19 @@ func TestValidateBlockNumberOptions4337(t *testing.T) {
 	}
 
 	for _, test := range testsPass {
-		if err := test.header.ValidateBlockNumberOptions4337(test.minBlockNumber, test.maxBlockNumber); err != nil {
+		if err := test.header.ValidateBlockNumberOptionsPIP15(test.minBlockNumber, test.maxBlockNumber); err != nil {
 			t.Fatalf("test number %v should not have failed. err: %v", test.number, err)
 		}
 	}
 
 	for _, test := range testsFail {
-		if err := test.header.ValidateBlockNumberOptions4337(test.minBlockNumber, test.maxBlockNumber); err == nil {
+		if err := test.header.ValidateBlockNumberOptionsPIP15(test.minBlockNumber, test.maxBlockNumber); err == nil {
 			t.Fatalf("test number %v should have failed. err is nil", test.number)
 		}
 	}
 }
 
-func TestValidateTimestampOptions4337(t *testing.T) {
+func TestValidateTimestampOptionsPIP15(t *testing.T) {
 	t.Parallel()
 
 	u64Ptr := func(n uint64) *uint64 {
@@ -616,13 +587,13 @@ func TestValidateTimestampOptions4337(t *testing.T) {
 	}
 
 	for _, test := range testsPass {
-		if err := test.header.ValidateTimestampOptions4337(test.minTimestamp, test.maxTimestamp); err != nil {
+		if err := test.header.ValidateTimestampOptionsPIP15(test.minTimestamp, test.maxTimestamp); err != nil {
 			t.Fatalf("test number %v should not have failed. err: %v", test.number, err)
 		}
 	}
 
 	for _, test := range testsFail {
-		if err := test.header.ValidateTimestampOptions4337(test.minTimestamp, test.maxTimestamp); err == nil {
+		if err := test.header.ValidateTimestampOptionsPIP15(test.minTimestamp, test.maxTimestamp); err == nil {
 			t.Fatalf("test number %v should have failed. err is nil", test.number)
 		}
 	}

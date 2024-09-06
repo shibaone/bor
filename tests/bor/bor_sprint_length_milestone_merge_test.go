@@ -195,7 +195,7 @@ func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -242,7 +242,7 @@ func TestSprintLengthMilestoneReorg(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -319,7 +319,7 @@ func SprintLengthMilestoneReorgIndividual2NodesHelper(t *testing.T, index int, t
 func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[string]interface{}) (uint64, uint64) {
 	t.Helper()
 
-	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -374,7 +374,7 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -461,7 +461,7 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uint64) (uint64, uint64) {
 	t.Helper()
 
-	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -516,7 +516,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -685,7 +685,7 @@ func rewindBackTemp(eth *eth.Ethereum, rewindTo uint64) {
 		eth.Miner().Stop(ch)
 		<-ch
 		rewindTemp(eth, rewindTo)
-		eth.StartMining(1)
+		eth.StartMining()
 	} else {
 
 		rewindTemp(eth, rewindTo)

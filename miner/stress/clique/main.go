@@ -30,7 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
@@ -45,7 +45,7 @@ import (
 )
 
 func main() {
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
 
 	// Generate a batch of accounts to seal and fund with
@@ -58,7 +58,7 @@ func main() {
 	for i := 0; i < len(sealers); i++ {
 		sealers[i], _ = crypto.GenerateKey()
 	}
-	// Create a Clique network based off of the Rinkeby config
+	// Create a Clique network based off of the Sepolia config
 	genesis := makeGenesis(faucets, sealers)
 
 	// Handle interrupts.
@@ -109,7 +109,7 @@ func main() {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -140,8 +140,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-
-		if err := backend.TxPool().AddLocal(tx); err != nil {
+		if err := backend.TxPool().Add([]*types.Transaction{tx}, true, false); err != nil {
 			panic(err)
 		}
 
@@ -157,8 +156,8 @@ func main() {
 // makeGenesis creates a custom Clique genesis block based on some pre-defined
 // signer and faucet accounts.
 func makeGenesis(faucets []*ecdsa.PrivateKey, sealers []*ecdsa.PrivateKey) *core.Genesis {
-	// Create a Clique network based off of the Rinkeby config
-	genesis := core.DefaultRinkebyGenesisBlock()
+	// Create a Clique network based off of the Sepolia config
+	genesis := core.DefaultSepoliaGenesisBlock()
 	genesis.GasLimit = 25000000
 
 	genesis.Config.ChainID = big.NewInt(18)
@@ -218,7 +217,7 @@ func makeSealer(genesis *core.Genesis) (*node.Node, *eth.Ethereum, error) {
 		SyncMode:        downloader.FullSync,
 		DatabaseCache:   256,
 		DatabaseHandles: 256,
-		TxPool:          txpool.DefaultConfig,
+		TxPool:          legacypool.DefaultConfig,
 		GPO:             ethconfig.Defaults.GPO,
 		Miner: miner.Config{
 			GasCeil:  genesis.GasLimit * 11 / 10,

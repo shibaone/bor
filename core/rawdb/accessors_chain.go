@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -31,22 +30,20 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"golang.org/x/exp/slices"
 )
 
 // ReadCanonicalHash retrieves the hash assigned to a canonical block number.
 func ReadCanonicalHash(db ethdb.Reader, number uint64) common.Hash {
 	var data []byte
-
-	_ = db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
+	db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
 		data, _ = reader.Ancient(ChainFreezerHashTable, number)
 		if len(data) == 0 {
 			// Get it by hash from leveldb
 			data, _ = db.Get(headerHashKey(number))
 		}
-
 		return nil
 	})
-
 	return common.BytesToHash(data)
 }
 
@@ -166,6 +163,23 @@ func ReadHeaderNumber(db ethdb.KeyValueReader, hash common.Hash) *uint64 {
 	number := binary.BigEndian.Uint64(data)
 
 	return &number
+}
+
+// ReadHeaderFromKvStore retrieves the block header corresponding to the hash only
+// from the underlying key-value store and doesn't use ancient freezer for backup.
+func ReadHeaderFromKvStore(db ethdb.KeyValueReader, hash common.Hash, number uint64) *types.Header {
+	data, _ := db.Get(headerKey(number, hash))
+	if len(data) == 0 {
+		return nil
+	}
+
+	header := new(types.Header)
+	if err := rlp.DecodeBytes(data, header); err != nil {
+		log.Error("Invalid block header RLP", "hash", hash, "err", err)
+		return nil
+	}
+
+	return header
 }
 
 // WriteHeaderNumber stores the hash->number mapping.
@@ -365,15 +379,19 @@ func ReadHeaderRange(db ethdb.Reader, number uint64, count uint64) []rlp.RawValu
 	if count == 0 {
 		return rlpHeaders
 	}
-	// read remaining from ancients
-	max := count * 700
-
-	data, err := db.AncientRange(ChainFreezerHeaderTable, i+1-count, count, max)
-	if err == nil && uint64(len(data)) == count {
-		// the data is on the order [h, h+1, .., n] -- reordering needed
-		for i := range data {
-			rlpHeaders = append(rlpHeaders, data[len(data)-1-i])
-		}
+	// read remaining from ancients, cap at 2M
+	data, err := db.AncientRange(ChainFreezerHeaderTable, i+1-count, count, 2*1024*1024)
+	if err != nil {
+		log.Error("Failed to read headers from freezer", "err", err)
+		return rlpHeaders
+	}
+	if uint64(len(data)) != count {
+		log.Warn("Incomplete read of headers from freezer", "wanted", count, "read", len(data))
+		return rlpHeaders
+	}
+	// The data is on the order [h, h+1, .., n] -- reordering needed
+	for i := range data {
+		rlpHeaders = append(rlpHeaders, data[len(data)-1-i])
 	}
 
 	return rlpHeaders
@@ -421,7 +439,7 @@ func ReadHeader(db ethdb.Reader, hash common.Hash, number uint64) *types.Header 
 	}
 
 	header := new(types.Header)
-	if err := rlp.Decode(bytes.NewReader(data), header); err != nil {
+	if err := rlp.DecodeBytes(data, header); err != nil {
 		log.Error("Invalid block header RLP", "hash", hash, "err", err)
 		return nil
 	}
@@ -551,7 +569,7 @@ func ReadBody(db ethdb.Reader, hash common.Hash, number uint64) *types.Body {
 	}
 
 	body := new(types.Body)
-	if err := rlp.Decode(bytes.NewReader(data), body); err != nil {
+	if err := rlp.DecodeBytes(data, body); err != nil {
 		log.Error("Invalid block body RLP", "hash", hash, "err", err)
 		return nil
 	}
@@ -603,7 +621,7 @@ func ReadTd(db ethdb.Reader, hash common.Hash, number uint64) *big.Int {
 	}
 
 	td := new(big.Int)
-	if err := rlp.Decode(bytes.NewReader(data), td); err != nil {
+	if err := rlp.DecodeBytes(data, td); err != nil {
 		log.Error("Invalid block total difficulty RLP", "hash", hash, "err", err)
 		return nil
 	}
@@ -694,7 +712,7 @@ func ReadRawReceipts(db ethdb.Reader, hash common.Hash, number uint64) types.Rec
 // The current implementation populates these metadata fields by reading the receipts'
 // corresponding block body, so if the block body is not found it will return nil even
 // if the receipt itself is stored.
-func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) types.Receipts {
+func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, time uint64, config *params.ChainConfig) types.Receipts {
 	// We're deriving many fields from the block body, retrieve beside the receipt
 	receipts := ReadRawReceipts(db, hash, number)
 	if receipts == nil {
@@ -716,8 +734,12 @@ func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, config *para
 	} else {
 		baseFee = header.BaseFee
 	}
-
-	if err := receipts.DeriveFields(config, hash, number, baseFee, body.Transactions); err != nil {
+	// Compute effective blob gas price.
+	var blobGasPrice *big.Int
+	if header != nil && header.ExcessBlobGas != nil {
+		blobGasPrice = nil
+	}
+	if err := receipts.DeriveFields(config, hash, number, time, baseFee, blobGasPrice, body.Transactions); err != nil {
 		log.Error("Failed to derive block receipts fields", "hash", hash, "number", number, "err", err)
 		return nil
 	}
@@ -805,23 +827,15 @@ func deriveLogFields(receipts []*receiptLogs, hash common.Hash, number uint64, t
 // ReadLogs retrieves the logs for all transactions in a block. In case
 // receipts is not found, a nil is returned.
 // Note: ReadLogs does not derive unstored log fields.
-func ReadLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) [][]*types.Log {
+func ReadLogs(db ethdb.Reader, hash common.Hash, number uint64) [][]*types.Log {
 	// Retrieve the flattened receipt slice
 	data := ReadReceiptsRLP(db, hash, number)
 	if len(data) == 0 {
 		return nil
 	}
-
 	receipts := []*receiptLogs{}
 	if err := rlp.DecodeBytes(data, &receipts); err != nil {
-		// Receipts might be in the legacy format, try decoding that.
-		// TODO: to be removed after users migrated
-		if logs := readLegacyLogs(db, hash, number, config); logs != nil {
-			return logs
-		}
-
 		log.Error("Invalid receipt array RLP", "hash", hash, "err", err)
-
 		return nil
 	}
 
@@ -829,24 +843,6 @@ func ReadLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.C
 	for i, receipt := range receipts {
 		logs[i] = receipt.Logs
 	}
-
-	return logs
-}
-
-// readLegacyLogs is a temporary workaround for when trying to read logs
-// from a block which has its receipt stored in the legacy format. It'll
-// be removed after users have migrated their freezer databases.
-func readLegacyLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) [][]*types.Log {
-	receipts := ReadReceipts(db, hash, number, config)
-	if receipts == nil {
-		return nil
-	}
-
-	logs := make([][]*types.Log, len(receipts))
-	for i, receipt := range receipts {
-		logs[i] = receipt.Logs
-	}
-
 	return logs
 }
 
@@ -971,24 +967,13 @@ type badBlock struct {
 	Body   *types.Body
 }
 
-// badBlockList implements the sort interface to allow sorting a list of
-// bad blocks by their number in the reverse order.
-type badBlockList []*badBlock
-
-func (s badBlockList) Len() int { return len(s) }
-func (s badBlockList) Less(i, j int) bool {
-	return s[i].Header.Number.Uint64() < s[j].Header.Number.Uint64()
-}
-func (s badBlockList) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
 // ReadBadBlock retrieves the bad block with the corresponding block hash.
 func ReadBadBlock(db ethdb.Reader, hash common.Hash) *types.Block {
 	blob, err := db.Get(badBlockKey)
 	if err != nil {
 		return nil
 	}
-
-	var badBlocks badBlockList
+	var badBlocks []*badBlock
 	if err := rlp.DecodeBytes(blob, &badBlocks); err != nil {
 		return nil
 	}
@@ -1009,8 +994,7 @@ func ReadAllBadBlocks(db ethdb.Reader) []*types.Block {
 	if err != nil {
 		return nil
 	}
-
-	var badBlocks badBlockList
+	var badBlocks []*badBlock
 	if err := rlp.DecodeBytes(blob, &badBlocks); err != nil {
 		return nil
 	}
@@ -1030,8 +1014,7 @@ func WriteBadBlock(db ethdb.KeyValueStore, block *types.Block) {
 	if err != nil {
 		log.Warn("Failed to load old bad blocks", "error", err)
 	}
-
-	var badBlocks badBlockList
+	var badBlocks []*badBlock
 	if len(blob) > 0 {
 		if err := rlp.DecodeBytes(blob, &badBlocks); err != nil {
 			log.Crit("Failed to decode old bad blocks", "error", err)
@@ -1049,8 +1032,10 @@ func WriteBadBlock(db ethdb.KeyValueStore, block *types.Block) {
 		Header: block.Header(),
 		Body:   block.Body(),
 	})
-	sort.Sort(sort.Reverse(badBlocks))
-
+	slices.SortFunc(badBlocks, func(a, b *badBlock) int {
+		// Note: sorting in descending number order.
+		return -a.Header.Number.Cmp(b.Header.Number)
+	})
 	if len(badBlocks) > badBlockToKeep {
 		badBlocks = badBlocks[:badBlockToKeep]
 	}

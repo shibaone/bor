@@ -25,12 +25,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/urfave/cli/v2"
-
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -60,7 +61,7 @@ var (
 
 func nodesetInfo(ctx *cli.Context) error {
 	if ctx.NArg() < 1 {
-		return fmt.Errorf("need nodes file as argument")
+		return errors.New("need nodes file as argument")
 	}
 
 	ns := loadNodesJSON(ctx.Args().First())
@@ -108,7 +109,7 @@ func showAttributeCounts(ns nodeSet) {
 
 func nodesetFilter(ctx *cli.Context) error {
 	if ctx.NArg() < 1 {
-		return fmt.Errorf("need nodes file as argument")
+		return errors.New("need nodes file as argument")
 	}
 	// Parse -limit.
 	limit, err := parseFilterLimit(ctx.Args().Tail())
@@ -259,15 +260,17 @@ func ethFilter(args []string) (nodeFilter, error) {
 
 	switch args[0] {
 	case "mainnet":
-		filter = forkid.NewStaticFilter(params.MainnetChainConfig, params.MainnetGenesisHash)
+		filter = forkid.NewStaticFilter(params.MainnetChainConfig, core.DefaultGenesisBlock().ToBlock())
 	case "goerli":
-		filter = forkid.NewStaticFilter(params.GoerliChainConfig, params.GoerliGenesisHash)
+		filter = forkid.NewStaticFilter(params.GoerliChainConfig, core.DefaultGoerliGenesisBlock().ToBlock())
 	case "sepolia":
-		filter = forkid.NewStaticFilter(params.SepoliaChainConfig, params.SepoliaGenesisHash)
+		filter = forkid.NewStaticFilter(params.SepoliaChainConfig, core.DefaultSepoliaGenesisBlock().ToBlock())
 	case "bor-mumbai":
-		filter = forkid.NewStaticFilter(params.MumbaiChainConfig, params.MumbaiGenesisHash)
+		filter = forkid.NewStaticFilter(params.MumbaiChainConfig, core.DefaultMumbaiGenesisBlock().ToBlock())
 	case "bor-mainnet":
-		filter = forkid.NewStaticFilter(params.BorMainnetChainConfig, params.BorMainnetGenesisHash)
+		filter = forkid.NewStaticFilter(params.BorMainnetChainConfig, core.DefaultBorMainnetGenesisBlock().ToBlock())
+	case "bor-amoy":
+		filter = forkid.NewStaticFilter(params.AmoyChainConfig, core.DefaultAmoyGenesisBlock().ToBlock())
 	default:
 		return nil, fmt.Errorf("unknown network %q", args[0])
 	}

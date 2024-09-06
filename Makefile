@@ -34,8 +34,9 @@ protoc:
 
 generate-mocks:
 	go generate mockgen -destination=./tests/bor/mocks/IHeimdallClient.go -package=mocks ./consensus/bor IHeimdallClient
+	go generate mockgen -destination=./eth/filters/IDatabase.go -package=filters ./ethdb Database
 	go generate mockgen -destination=./eth/filters/IBackend.go -package=filters ./eth/filters Backend
-	go generate mockgen -destination=../eth/filters/IDatabase.go -package=filters . Database
+	go generate mockgen -destination=../eth/filters/IDatabase.go -package=filters ./ethdb Database
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
@@ -58,14 +59,14 @@ ios:
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test:
-	$(GOTEST) --timeout 5m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
+	$(GOTEST) --timeout 15m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
 
 test-txpool-race:
 	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
 
 test-race:
 	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
-	
+
 gocovmerge-deps:
 	$(GOBUILD) -o $(GOBIN)/gocovmerge github.com/wadey/gocovmerge
 
@@ -80,7 +81,7 @@ lint:
 
 lintci-deps:
 	rm -f ./build/bin/golangci-lint
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.53.3
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.57.2
 
 goimports:
 	goimports -local "$(PACKAGE)" -w .
@@ -89,7 +90,7 @@ docs:
 	$(GORUN) cmd/clidoc/main.go -d ./docs/cli
 
 clean:
-	env GO111MODULE=on go clean -cache
+	go clean -cache
 	rm -fr build/_workspace/pkg/ $(GOBIN)/*
 
 # The devtools target installs tools required for 'go generate'.
@@ -201,7 +202,7 @@ geth-windows-amd64:
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
 PACKAGE_NAME          := github.com/maticnetwork/bor
-GOLANG_CROSS_VERSION  ?= v1.20.5
+GOLANG_CROSS_VERSION  ?= v1.22.1
 
 .PHONY: release-dry-run
 release-dry-run:

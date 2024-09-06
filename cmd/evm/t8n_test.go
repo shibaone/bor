@@ -24,9 +24,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/pkg/reexec"
 	"github.com/ethereum/go-ethereum/cmd/evm/internal/t8ntool"
 	"github.com/ethereum/go-ethereum/internal/cmdtest"
+	"github.com/ethereum/go-ethereum/internal/reexec"
 )
 
 func TestMain(m *testing.M) {
@@ -116,6 +116,7 @@ func (args *t8nOutput) get() (out []string) {
 }
 
 func TestT8n(t *testing.T) {
+	t.Parallel()
 	tt := new(testT8n)
 	tt.TestCmd = cmdtest.NewTestCmd(t, tt)
 
@@ -270,6 +271,30 @@ func TestT8n(t *testing.T) {
 			output: t8nOutput{alloc: true, result: true},
 			expOut: "exp.json",
 		},
+		{ // Cancun tests
+			base: "./testdata/28",
+			input: t8nInput{
+				"alloc.json", "txs.rlp", "env.json", "Cancun", "",
+			},
+			output: t8nOutput{alloc: true, result: true},
+			expOut: "exp.json",
+		},
+		{ // More cancun tests
+			base: "./testdata/29",
+			input: t8nInput{
+				"alloc.json", "txs.json", "env.json", "Cancun", "",
+			},
+			output: t8nOutput{alloc: true, result: true},
+			expOut: "exp.json",
+		},
+		{ // More cancun test, plus example of rlp-transaction that cannot be decoded properly
+			base: "./testdata/30",
+			input: t8nInput{
+				"alloc.json", "txs_more.rlp", "env.json", "Cancun", "",
+			},
+			output: t8nOutput{alloc: true, result: true},
+			expOut: "exp.json",
+		},
 	} {
 		args := []string{"t8n"}
 		args = append(args, tc.output.get()...)
@@ -289,7 +314,8 @@ func TestT8n(t *testing.T) {
 		tt.Run("evm-test", args...)
 		// Compare the expected output, if provided
 		if tc.expOut != "" {
-			want, err := os.ReadFile(fmt.Sprintf("%v/%v", tc.base, tc.expOut))
+			file := fmt.Sprintf("%v/%v", tc.base, tc.expOut)
+			want, err := os.ReadFile(file)
 			if err != nil {
 				t.Fatalf("test %d: could not read expected output: %v", i, err)
 			}
@@ -299,9 +325,9 @@ func TestT8n(t *testing.T) {
 			ok, err := cmpJson(have, want)
 			switch {
 			case err != nil:
-				t.Fatalf("test %d, json parsing failed: %v", i, err)
+				t.Fatalf("test %d, file %v: json parsing failed: %v", i, file, err)
 			case !ok:
-				t.Fatalf("test %d: output wrong, have \n%v\nwant\n%v\n", i, string(have), string(want))
+				t.Fatalf("test %d, file %v: output wrong, have \n%v\nwant\n%v\n", i, file, string(have), string(want))
 			}
 		}
 
@@ -333,6 +359,7 @@ func (args *t9nInput) get(base string) []string {
 }
 
 func TestT9n(t *testing.T) {
+	t.Parallel()
 	tt := new(testT8n)
 	tt.TestCmd = cmdtest.NewTestCmd(t, tt)
 
@@ -482,6 +509,7 @@ func (args *b11rInput) get(base string) []string {
 }
 
 func TestB11r(t *testing.T) {
+	t.Parallel()
 	tt := new(testT8n)
 	tt.TestCmd = cmdtest.NewTestCmd(t, tt)
 

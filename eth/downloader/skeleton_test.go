@@ -177,7 +177,7 @@ func (p *skeletonTestPeer) RequestHeadersByNumber(origin uint64, amount int, ski
 	}
 	res := &eth.Response{
 		Req:  req,
-		Res:  (*eth.BlockHeadersPacket)(&headers),
+		Res:  (*eth.BlockHeadersRequest)(&headers),
 		Meta: hashes,
 		Time: 1,
 		Done: make(chan error),
@@ -449,7 +449,7 @@ func TestSkeletonSyncExtend(t *testing.T) {
 			newstate: []*subchain{
 				{Head: 49, Tail: 49},
 			},
-			err: errReorgDenied,
+			err: errChainReorged,
 		},
 		// Initialize a sync and try to extend it with a number-wise sequential
 		// header, but a hash wise non-linking one.
@@ -459,7 +459,7 @@ func TestSkeletonSyncExtend(t *testing.T) {
 			newstate: []*subchain{
 				{Head: 49, Tail: 49},
 			},
-			err: errReorgDenied,
+			err: errChainForked,
 		},
 		// Initialize a sync and try to extend it with a non-linking future block.
 		{
@@ -468,7 +468,7 @@ func TestSkeletonSyncExtend(t *testing.T) {
 			newstate: []*subchain{
 				{Head: 49, Tail: 49},
 			},
-			err: errReorgDenied,
+			err: errChainGapped,
 		},
 		// Initialize a sync and try to extend it with a past canonical block.
 		{
@@ -477,7 +477,7 @@ func TestSkeletonSyncExtend(t *testing.T) {
 			newstate: []*subchain{
 				{Head: 50, Tail: 50},
 			},
-			err: errReorgDenied,
+			err: errChainReorged,
 		},
 		// Initialize a sync and try to extend it with a past sidechain block.
 		{
@@ -486,7 +486,7 @@ func TestSkeletonSyncExtend(t *testing.T) {
 			newstate: []*subchain{
 				{Head: 50, Tail: 50},
 			},
-			err: errReorgDenied,
+			err: errChainReorged,
 		},
 	}
 	for i, tt := range tests {
@@ -502,8 +502,7 @@ func TestSkeletonSyncExtend(t *testing.T) {
 		_ = skeleton.Sync(tt.head, nil, true)
 
 		<-wait
-
-		if err := skeleton.Sync(tt.extend, nil, false); err != tt.err {
+		if err := skeleton.Sync(tt.extend, nil, false); !errors.Is(err, tt.err) {
 			t.Errorf("test %d: extension failure mismatch: have %v, want %v", i, err, tt.err)
 		}
 
@@ -833,7 +832,7 @@ func TestSkeletonSyncRetrievals(t *testing.T) {
 		// Create a peer set to feed headers through
 		peerset := newPeerSet()
 		for _, peer := range tt.peers {
-			peerset.Register(newPeerConnection(peer.id, eth.ETH66, peer, log.New("id", peer.id)))
+			peerset.Register(newPeerConnection(peer.id, eth.ETH67, peer, log.New("id", peer.id)))
 		}
 		// Create a peer dropper to track malicious peers
 		dropped := make(map[string]int)
@@ -949,7 +948,7 @@ func TestSkeletonSyncRetrievals(t *testing.T) {
 		}
 
 		if tt.newPeer != nil {
-			if err := peerset.Register(newPeerConnection(tt.newPeer.id, eth.ETH66, tt.newPeer, log.New("id", tt.newPeer.id))); err != nil {
+			if err := peerset.Register(newPeerConnection(tt.newPeer.id, eth.ETH67, tt.newPeer, log.New("id", tt.newPeer.id))); err != nil {
 				t.Errorf("test %d: failed to register new peer: %v", i, err)
 			}
 		}

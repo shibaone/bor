@@ -80,11 +80,7 @@ func localConsole(ctx *cli.Context) error {
 	defer stack.Close()
 
 	// Attach to the newly started node and create the JavaScript console.
-	client, err := stack.Attach()
-	if err != nil {
-		return fmt.Errorf("failed to attach to the inproc geth: %v", err)
-	}
-
+	client := stack.Attach()
 	config := console.Config{
 		DataDir: utils.MakeDataDir(ctx),
 		DocRoot: ctx.String(utils.JSpathFlag.Name),
@@ -136,7 +132,7 @@ func remoteConsole(ctx *cli.Context) error {
 		if path != "" {
 			if ctx.Bool(utils.GoerliFlag.Name) {
 				path = filepath.Join(path, "goerli")
-			} else if ctx.Bool(utils.MumbaiFlag.Name) || ctx.Bool(utils.BorMainnetFlag.Name) {
+			} else if ctx.Bool(utils.MumbaiFlag.Name) || ctx.Bool(utils.AmoyFlag.Name) || ctx.Bool(utils.BorMainnetFlag.Name) {
 				homeDir, _ := os.UserHomeDir()
 				path = filepath.Join(homeDir, "/.bor/data")
 			} else if ctx.Bool(utils.SepoliaFlag.Name) {

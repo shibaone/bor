@@ -42,7 +42,7 @@ const (
 )
 
 func TestMiningAfterLocking(t *testing.T) {
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -90,7 +90,7 @@ func TestMiningAfterLocking(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -151,7 +151,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -199,7 +199,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -271,7 +271,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -319,7 +319,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -384,7 +384,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -432,7 +432,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -506,7 +506,7 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -553,7 +553,7 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -594,7 +594,7 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -641,7 +641,7 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -683,7 +683,7 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -732,7 +732,7 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -803,7 +803,7 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -853,7 +853,7 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -925,7 +925,7 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -975,7 +975,7 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	//Only started the node 0 and keep the node 1 as non mining
-	err = nodes[0].StartMining(1)
+	err = nodes[0].StartMining()
 	if err != nil {
 		panic(err)
 	}
@@ -1022,7 +1022,7 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -1071,7 +1071,7 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	//Only started the node 0 and keep the node 1 as non mining
-	err = nodes[0].StartMining(1)
+	err = nodes[0].StartMining()
 	if err != nil {
 		panic(err)
 	}
@@ -1114,7 +1114,7 @@ func TestRewind(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -1163,7 +1163,7 @@ func TestRewind(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -1211,7 +1211,7 @@ func TestRewind(t *testing.T) {
 				panic(err)
 			}
 
-			err = nodes[1].StartMining(1)
+			err = nodes[1].StartMining()
 
 			if err != nil {
 				panic(err)
@@ -1230,7 +1230,7 @@ func TestRewinding(t *testing.T) {
 	t.Skip()
 	// t.Parallel()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	_, err := fdlimit.Raise(2048)
 
@@ -1280,7 +1280,7 @@ func TestRewinding(t *testing.T) {
 
 	//Start mining
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -1372,7 +1372,7 @@ func rewindBack(eth *eth.Ethereum, rewindTo uint64) {
 		<-ch
 		rewind(eth, rewindTo)
 
-		err := eth.StartMining(1)
+		err := eth.StartMining()
 
 		if err != nil {
 			panic(err)

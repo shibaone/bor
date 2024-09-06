@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -40,6 +41,9 @@ func (n *Node) apis() []rpc.API {
 		}, {
 			Namespace: "debug",
 			Service:   debug.Handler,
+		}, {
+			Namespace: "debug",
+			Service:   &p2pDebugAPI{n},
 		}, {
 			Namespace: "web3",
 			Service:   &web3API{n},
@@ -215,6 +219,10 @@ func (api *adminAPI) StartHTTP(host *string, port *int, cors *string, apis *stri
 		CorsAllowedOrigins: api.node.config.HTTPCors,
 		Vhosts:             api.node.config.HTTPVirtualHosts,
 		Modules:            api.node.config.HTTPModules,
+		rpcEndpointConfig: rpcEndpointConfig{
+			batchItemLimit:         api.node.config.BatchRequestLimit,
+			batchResponseSizeLimit: api.node.config.BatchResponseMaxSize,
+		},
 	}
 	if cors != nil {
 		config.CorsAllowedOrigins = nil
@@ -296,6 +304,10 @@ func (api *adminAPI) StartWS(host *string, port *int, allowedOrigins *string, ap
 		Modules: api.node.config.WSModules,
 		Origins: api.node.config.WSOrigins,
 		// ExposeAll: api.node.config.WSExposeAll,
+		rpcEndpointConfig: rpcEndpointConfig{
+			batchItemLimit:         api.node.config.BatchRequestLimit,
+			batchResponseSizeLimit: api.node.config.BatchResponseMaxSize,
+		},
 	}
 	if apis != nil {
 		config.Modules = nil
@@ -468,4 +480,17 @@ func (api *adminAPI) SetHttpExecutionPoolSize(n int) *ExecutionPoolSize {
 	}
 
 	return api.GetExecutionPoolSize()
+}
+
+// p2pDebugAPI provides access to p2p internals for debugging.
+type p2pDebugAPI struct {
+	stack *Node
+}
+
+func (s *p2pDebugAPI) DiscoveryV4Table() [][]discover.BucketNode {
+	disc := s.stack.server.DiscoveryV4()
+	if disc != nil {
+		return disc.TableBuckets()
+	}
+	return nil
 }

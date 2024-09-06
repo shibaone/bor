@@ -1068,21 +1068,12 @@ func (t *freezerTable) dumpIndex(w io.Writer, start, stop int64) {
 // Fill adds empty data till given number (convenience method for backward compatibility)
 func (t *freezerTable) Fill(number uint64) error {
 	if t.items.Load() < number {
-<<<<<<< HEAD
-		b := t.newBatch()
-		log.Info("Filling all data into freezer for backward compatibility", "name", t.name, "items", t.items.Load(), "number", number)
-
-		for t.items.Load() < number {
-			if err := b.Append(t.items.Load(), nil); err != nil {
-				log.Error("Failed to fill data into freezer", "name", t.name, "items", t.items.Load(), "number", number, "err", err)
-=======
 		b := t.newBatch(0)
 		log.Info("Filling all data into freezer for backward compatibility", "name", t.name, "items", &t.items, "number", number)
 
 		for t.items.Load() < number {
 			if err := b.Append(t.items.Load(), nil); err != nil {
 				log.Error("Failed to fill data into freezer", "name", t.name, "items", &t.items, "number", number, "err", err)
->>>>>>> v1.3.7-bone-candidate
 				return err
 			}
 		}

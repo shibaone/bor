@@ -1,9 +1,5 @@
 Source: bor
-<<<<<<< HEAD
-Version: 1.1.2-bone-beta
-=======
 Version: 1.3.7
->>>>>>> v1.3.7-bone-candidate
 Section: develop
 Priority: standard
 Maintainer: Polygon <release-team@polygon.technology>

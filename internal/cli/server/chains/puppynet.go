@@ -29,10 +29,9 @@ var puppynet = &Chain{
 			LondonBlock:         big.NewInt(0),
 			ShanghaiBlock:       big.NewInt(1891968),
 			Bor: &params.BorConfig{
-				JaipurBlock:           big.NewInt(0),
-				DelhiBlock:            big.NewInt(1891840),
-				ParallelUniverseBlock: big.NewInt(0),
-				IndoreBlock:           big.NewInt(1891904),
+				JaipurBlock: big.NewInt(0),
+				DelhiBlock:  big.NewInt(1891840),
+				IndoreBlock: big.NewInt(1891904),
 				StateSyncConfirmationDelay: map[string]uint64{
 					"1891904": 128,
 				},

@@ -221,6 +221,11 @@ func generateCache(dest []uint32, epoch uint64, seed []byte) {
 		swap(cache)
 	}
 }
+func isLittleEndian() bool {
+	var i int32 = 0x01020304
+	u := (*[4]byte)(unsafe.Pointer(&i))
+	return u[0] == 0x04
+}
 
 // swap changes the byte order of the buffer assuming a uint32 representation.
 func swap(buffer []byte) {

@@ -58,7 +58,7 @@ syncmode = "full"
 
 [txpool]
   nolocals = true
-  # pricelimit = 1000000000
+  pricelimit = 1000000000
   accountslots = 16
   globalslots = 131072
   accountqueue = 64
@@ -129,7 +129,7 @@ syncmode = "full"
   # maxheaderhistory = 1024
   # maxblockhistory = 1024
   # maxprice = "5000000000000"
-  # ignoreprice = "1000000000"
+  ignoreprice = "1000000000"
 
 [telemetry]
   metrics = true

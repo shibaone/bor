@@ -28,7 +28,7 @@ var puppynet = &Chain{
 			BerlinBlock:         big.NewInt(0),
 			LondonBlock:         big.NewInt(0),
 			ShanghaiBlock:       big.NewInt(1891968),
-			CancunBlock:         big.NewInt(54876000),
+			CancunBlock:         big.NewInt(4697000),
 			Bor: &params.BorConfig{
 				JaipurBlock: big.NewInt(0),
 				DelhiBlock:  big.NewInt(1891840),

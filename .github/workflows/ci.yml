@@ -5,8 +5,8 @@ on:
       - "master"
       - "qa"
       - "develop"
-      - "v0.5.0/yann-zama-fhe"
       - "v1.2.7/yann-zama-fhe"
+      - "v1.3.7-fhe-bone-candidate"
 
   pull_request:
     branches:
@@ -30,7 +30,7 @@ jobs:
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
-        - uses: actions/setup-go@v3
+        - uses: actions/setup-go@v5
           with:
             go-version: 1.22.x
 
@@ -72,7 +72,7 @@ jobs:
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
-        - uses: actions/setup-go@v3
+        - uses: actions/setup-go@v5
           with:
             go-version: 1.22.x
 
@@ -100,7 +100,7 @@ jobs:
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
-        - uses: actions/setup-go@v3
+        - uses: actions/setup-go@v5
           with:
             go-version: 1.22.x
 
@@ -151,7 +151,7 @@ jobs:
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
-        - uses: actions/setup-go@v3
+        - uses: actions/setup-go@v5
           with:
             go-version: 1.22.x
 
@@ -218,7 +218,7 @@ jobs:
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
-        - uses: actions/setup-go@v3
+        - uses: actions/setup-go@v5
           with:
             go-version: 1.22.x
 
@@ -283,6 +283,8 @@ jobs:
 
         - name: Run smoke tests
           run: |
+            echo "Funding ganache accounts..."
+            timeout 10m bash bor/integration-tests/fund_ganache_accounts.sh
             echo "Deposit 100 matic for each account to bor network"
             cd matic-cli/devnet/code/contracts
             npm run truffle exec scripts/deposit.js -- --network development $(jq -r .root.tokens.MaticToken contractAddresses.json) 100000000000000000000

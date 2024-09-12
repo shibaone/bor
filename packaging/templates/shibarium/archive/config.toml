@@ -57,12 +57,12 @@ gcmode = "archive"
     # locals = []
     # journal = ""
     # rejournal = "1h0m0s"
-    # pricelimit = 1
+    pricelimit = 1000000000
     # pricebump = 10
 
 [miner]
     gaslimit = 20000000
-    # gasprice = "30000000000"
+    gasprice = "1000000000"
     # mine = false
     # etherbase = ""
     # extradata = ""
@@ -81,7 +81,7 @@ gcmode = "archive"
         enabled = true
         port = 8545
         host = "0.0.0.0"
-        api = ["eth", "net", "web3", "txpool", "bor"]
+        api = ["eth", "net", "web3", "txpool", "bor", "debug"]
         vhosts = ["*"]
         corsdomain = ["*"]
         # prefix = ""
@@ -113,13 +113,13 @@ gcmode = "archive"
         # write = "30s"
         # idle = "2m0s"
 
-# [gpo]
+[gpo]
     # blocks = 20
     # percentile = 60
     # maxheaderhistory = 1024
     # maxblockhistory = 1024
     # maxprice = "5000000000000"
-    # ignoreprice = "30000000000"
+    ignoreprice = "1000000000"
 
 [telemetry]
     metrics = true
@@ -138,7 +138,7 @@ gcmode = "archive"
         # organization = ""
     # [telemetry.influx.tags]
 
-# [cache]
+[cache]
     # cache = 4096
     # gc = 0
     # snapshot = 20
@@ -148,7 +148,7 @@ gcmode = "archive"
     # rejournal = "1h0m0s"
     # noprefetch = false
     # preimages = false
-    # txlookuplimit = 2350000
+    txlookuplimit = 2350000
     # timeout = "1h0m0s"
     # fdlimit = 0
 

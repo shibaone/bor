@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -30,9 +31,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 var (
@@ -46,6 +49,7 @@ var (
 			discv4ResolveJSONCommand,
 			discv4CrawlCommand,
 			discv4TestCommand,
+			discv4ListenCommand,
 		},
 	}
 	discv4PingCommand = &cli.Command{
@@ -75,6 +79,14 @@ var (
 		Action:    discv4ResolveJSON,
 		Flags:     discoveryNodeFlags,
 		ArgsUsage: "<nodes.json file>",
+	}
+	discv4ListenCommand = &cli.Command{
+		Name:   "listen",
+		Usage:  "Runs a discovery node",
+		Action: discv4Listen,
+		Flags: flags.Merge(discoveryNodeFlags, []cli.Flag{
+			httpAddrFlag,
+		}),
 	}
 	discv4CrawlCommand = &cli.Command{
 		Name:   "crawl",
@@ -132,6 +144,10 @@ var (
 		Usage:   "Enode of the remote node under test",
 		EnvVars: []string{"REMOTE_ENODE"},
 	}
+	httpAddrFlag = &cli.StringFlag{
+		Name:  "rpc",
+		Usage: "HTTP server listening address",
+	}
 )
 
 var discoveryNodeFlags = []cli.Flag{
@@ -144,8 +160,7 @@ var discoveryNodeFlags = []cli.Flag{
 
 func discv4Ping(ctx *cli.Context) error {
 	n := getNodeArg(ctx)
-
-	disc := startV4(ctx)
+	disc, _ := startV4(ctx)
 	defer disc.Close()
 
 	start := time.Now()
@@ -159,10 +174,30 @@ func discv4Ping(ctx *cli.Context) error {
 	return nil
 }
 
+func discv4Listen(ctx *cli.Context) error {
+	disc, _ := startV4(ctx)
+	defer disc.Close()
+
+	fmt.Println(disc.Self())
+
+	httpAddr := ctx.String(httpAddrFlag.Name)
+	if httpAddr == "" {
+		// Non-HTTP mode.
+		select {}
+	}
+
+	api := &discv4API{disc}
+	log.Info("Starting RPC API server", "addr", httpAddr)
+	srv := rpc.NewServer("", 0, 0)
+	srv.RegisterName("discv4", api)
+	http.DefaultServeMux.Handle("/", srv)
+	httpsrv := http.Server{Addr: httpAddr, Handler: http.DefaultServeMux}
+	return httpsrv.ListenAndServe()
+}
+
 func discv4RequestRecord(ctx *cli.Context) error {
 	n := getNodeArg(ctx)
-
-	disc := startV4(ctx)
+	disc, _ := startV4(ctx)
 	defer disc.Close()
 
 	respN, err := disc.RequestENR(n)
@@ -177,8 +212,7 @@ func discv4RequestRecord(ctx *cli.Context) error {
 
 func discv4Resolve(ctx *cli.Context) error {
 	n := getNodeArg(ctx)
-
-	disc := startV4(ctx)
+	disc, _ := startV4(ctx)
 	defer disc.Close()
 
 	fmt.Println(disc.Resolve(n).String())
@@ -210,10 +244,13 @@ func discv4ResolveJSON(ctx *cli.Context) error {
 		nodeargs = append(nodeargs, n)
 	}
 
-	// Run the crawler.
-	disc := startV4(ctx)
+	disc, config := startV4(ctx)
 	defer disc.Close()
-	c := newCrawler(inputSet, disc, enode.IterNodes(nodeargs))
+
+	c, err := newCrawler(inputSet, config.Bootnodes, disc, enode.IterNodes(nodeargs))
+	if err != nil {
+		return err
+	}
 	c.revalidateInterval = 0
 	output := c.run(0, 1)
 	writeNodesJSON(nodesFile, output)
@@ -227,16 +264,18 @@ func discv4Crawl(ctx *cli.Context) error {
 	}
 
 	nodesFile := ctx.Args().First()
-
-	var inputSet nodeSet
-
+	inputSet := make(nodeSet)
 	if common.FileExist(nodesFile) {
 		inputSet = loadNodesJSON(nodesFile)
 	}
 
-	disc := startV4(ctx)
+	disc, config := startV4(ctx)
 	defer disc.Close()
-	c := newCrawler(inputSet, disc, disc.RandomNodes())
+
+	c, err := newCrawler(inputSet, config.Bootnodes, disc, disc.RandomNodes())
+	if err != nil {
+		return err
+	}
 	c.revalidateInterval = 10 * time.Minute
 	output := c.run(ctx.Duration(crawlTimeoutFlag.Name), ctx.Int(crawlParallelismFlag.Name))
 	writeNodesJSON(nodesFile, output)
@@ -248,7 +287,7 @@ func discv4Crawl(ctx *cli.Context) error {
 func discv4Test(ctx *cli.Context) error {
 	// Configure test package globals.
 	if !ctx.IsSet(remoteEnodeFlag.Name) {
-		return fmt.Errorf("Missing -%v", remoteEnodeFlag.Name)
+		return fmt.Errorf("missing -%v", remoteEnodeFlag.Name)
 	}
 
 	v4test.Remote = ctx.String(remoteEnodeFlag.Name)
@@ -259,7 +298,7 @@ func discv4Test(ctx *cli.Context) error {
 }
 
 // startV4 starts an ephemeral discovery V4 node.
-func startV4(ctx *cli.Context) *discover.UDPv4 {
+func startV4(ctx *cli.Context) (*discover.UDPv4, discover.Config) {
 	ln, config := makeDiscoveryConfig(ctx)
 	socket := listen(ctx, ln)
 
@@ -267,8 +306,7 @@ func startV4(ctx *cli.Context) *discover.UDPv4 {
 	if err != nil {
 		exit(err)
 	}
-
-	return disc
+	return disc, config
 }
 
 func makeDiscoveryConfig(ctx *cli.Context) (*enode.LocalNode, discover.Config) {
@@ -399,4 +437,24 @@ func parseBootnodes(ctx *cli.Context) ([]*enode.Node, error) {
 	}
 
 	return nodes, nil
+}
+
+type discv4API struct {
+	host *discover.UDPv4
+}
+
+func (api *discv4API) LookupRandom(n int) (ns []*enode.Node) {
+	it := api.host.RandomNodes()
+	for len(ns) < n && it.Next() {
+		ns = append(ns, it.Node())
+	}
+	return ns
+}
+
+func (api *discv4API) Buckets() [][]discover.BucketNode {
+	return api.host.TableBuckets()
+}
+
+func (api *discv4API) Self() *enode.Node {
+	return api.host.Self()
 }

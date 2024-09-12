@@ -84,6 +84,9 @@ type Config struct {
 	// GcMode selects the garbage collection mode for the trie
 	GcMode string `hcl:"gcmode,optional" toml:"gcmode,optional"`
 
+	// state.scheme selects the Scheme to use for storing ethereum state ('hash' or 'path')
+	StateScheme string `hcl:"state.scheme,optional" toml:"state.scheme,optional"`
+
 	// Snapshot enables the snapshot database mode
 	Snapshot bool `hcl:"snapshot,optional" toml:"snapshot,optional"`
 
@@ -642,16 +645,17 @@ func DefaultConfig() *Config {
 			Without:     false,
 			GRPCAddress: "",
 		},
-		SyncMode: "full",
-		GcMode:   "full",
-		Snapshot: true,
-		BorLogs:  false,
+		SyncMode:    "full",
+		GcMode:      "full",
+		StateScheme: "hash",
+		Snapshot:    true,
+		BorLogs:     false,
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
 			Journal:      "transactions.rlp",
 			Rejournal:    1 * time.Hour,
-			PriceLimit:   1, // geth's default
+			PriceLimit:   params.BorDefaultTxPoolPriceLimit, // bor's default
 			PriceBump:    10,
 			AccountSlots: 16,
 			GlobalSlots:  32768,
@@ -662,8 +666,8 @@ func DefaultConfig() *Config {
 		Sealer: &SealerConfig{
 			Enabled:             false,
 			Etherbase:           "",
-			GasCeil:             30_000_000,                  // geth's default
-			GasPrice:            big.NewInt(1 * params.GWei), // geth's default
+			GasCeil:             30_000_000,                                 // geth's default
+			GasPrice:            big.NewInt(params.BorDefaultMinerGasPrice), // bor's default
 			ExtraData:           "",
 			Recommit:            125 * time.Second,
 			CommitInterruptFlag: true,
@@ -674,7 +678,7 @@ func DefaultConfig() *Config {
 			MaxHeaderHistory: 1024,
 			MaxBlockHistory:  1024,
 			MaxPrice:         gasprice.DefaultMaxPrice,
-			IgnorePrice:      gasprice.DefaultIgnorePrice,
+			IgnorePrice:      gasprice.DefaultIgnorePrice, // bor's default
 		},
 		JsonRPC: &JsonRPCConfig{
 			IPCDisable:          false,
@@ -1166,6 +1170,14 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		}
 	default:
 		return nil, fmt.Errorf("gcmode '%s' not found", c.GcMode)
+	}
+
+	// statescheme "hash" or "path"
+	switch c.StateScheme {
+	case "path":
+		n.StateScheme = "path"
+	default:
+		n.StateScheme = "hash"
 	}
 
 	// snapshot disable check

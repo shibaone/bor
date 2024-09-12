@@ -52,8 +52,8 @@ type chainFreezer struct {
 }
 
 // newChainFreezer initializes the freezer for ancient chain data.
-func newChainFreezer(datadir string, namespace string, readonly bool) (*chainFreezer, error) {
-	freezer, err := NewChainFreezer(datadir, namespace, readonly)
+func newChainFreezer(datadir string, namespace string, readonly bool, offset uint64) (*chainFreezer, error) {
+	freezer, err := NewChainFreezer(datadir, namespace, readonly, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +230,7 @@ func (f *chainFreezer) freeze(db ethdb.KeyValueStore) {
 
 		batch.Reset()
 
-		// Step into the future and delete and dangling side chains
+		// Step into the future and delete any dangling side chains
 		if frozen > 0 {
 			tip := frozen
 

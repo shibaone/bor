@@ -18,6 +18,7 @@
 package msgrate
 
 import (
+	"context"
 	"errors"
 	"math"
 	"sort"
@@ -80,7 +81,7 @@ const ttlLimit = time.Minute
 
 // tuningConfidenceCap is the number of active peers above which to stop detuning
 // the confidence number. The idea here is that once we hone in on the capacity
-// of a meaningful number of peers, adding one more should ot have a significant
+// of a meaningful number of peers, adding one more should not have a significant
 // impact on things, so just ron with the originals.
 const tuningConfidenceCap = 10
 
@@ -424,7 +425,9 @@ func (t *Trackers) tune() {
 
 	t.tuned = time.Now()
 	t.log.Debug("Recalculated msgrate QoS values", "rtt", t.roundtrip, "confidence", t.confidence, "ttl", t.targetTimeout(), "next", t.tuned.Add(t.roundtrip))
-	t.log.Trace("Debug dump of mean capacities", "caps", log.Lazy{Fn: t.meanCapacities})
+	if t.log.Enabled(context.Background(), log.LevelTrace) {
+		t.log.Trace("Debug dump of mean capacities", "caps", t.meanCapacities())
+	}
 }
 
 // detune reduces the tracker's confidence in order to make fresh measurements

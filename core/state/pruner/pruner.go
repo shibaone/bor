@@ -28,13 +28,17 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+
+	"github.com/prometheus/tsdb/fileutil"
 )
 
 const (
@@ -85,13 +89,16 @@ func NewPruner(db ethdb.Database, config Config) (*Pruner, error) {
 	if headBlock == nil {
 		return nil, errors.New("failed to load head block")
 	}
+	// Offline pruning is only supported in legacy hash based scheme.
+	triedb := trie.NewDatabase(db, trie.HashDefaults)
+
 	snapconfig := snapshot.Config{
 		CacheSize:  256,
 		Recovery:   false,
 		NoBuild:    true,
 		AsyncBuild: false,
 	}
-	snaptree, err := snapshot.New(snapconfig, db, trie.NewDatabase(db), headBlock.Root())
+	snaptree, err := snapshot.New(snapconfig, db, triedb, headBlock.Root())
 	if err != nil {
 		return nil, err // The relevant snapshot(s) might not exist
 	}
@@ -118,16 +125,16 @@ func prune(snaptree *snapshot.Tree, root common.Hash, maindb ethdb.Database, sta
 	// the trie nodes(and codes) belong to the active state will be filtered
 	// out. A very small part of stale tries will also be filtered because of
 	// the false-positive rate of bloom filter. But the assumption is held here
-	// that the false-positive is low enough(~0.05%). The probablity of the
+	// that the false-positive is low enough(~0.05%). The probability of the
 	// dangling node is the state root is super low. So the dangling nodes in
 	// theory will never ever be visited again.
 	var (
-		count  int
-		size   common.StorageSize
-		pstart = time.Now()
-		logged = time.Now()
-		batch  = maindb.NewBatch()
-		iter   = maindb.NewIterator(nil, nil)
+		skipped, count int
+		size           common.StorageSize
+		pstart         = time.Now()
+		logged         = time.Now()
+		batch          = maindb.NewBatch()
+		iter           = maindb.NewIterator(nil, nil)
 	)
 	for iter.Next() {
 		key := iter.Key()
@@ -146,6 +153,7 @@ func prune(snaptree *snapshot.Tree, root common.Hash, maindb ethdb.Database, sta
 				log.Debug("Forcibly delete the middle state roots", "hash", common.BytesToHash(checkKey))
 			} else {
 				if stateBloom.Contain(checkKey) {
+					skipped += 1
 					continue
 				}
 			}
@@ -162,7 +170,7 @@ func prune(snaptree *snapshot.Tree, root common.Hash, maindb ethdb.Database, sta
 				eta = time.Duration(left/speed) * time.Millisecond
 			}
 			if time.Since(logged) > 8*time.Second {
-				log.Info("Pruning state data", "nodes", count, "size", size,
+				log.Info("Pruning state data", "nodes", count, "skipped", skipped, "size", size,
 					"elapsed", common.PrettyDuration(time.Since(pstart)), "eta", common.PrettyDuration(eta))
 				logged = time.Now()
 			}
@@ -328,6 +336,239 @@ func (p *Pruner) Prune(root common.Hash) error {
 	return prune(p.snaptree, root, p.db, p.stateBloom, filterName, middleRoots, start)
 }
 
+type BlockPruner struct {
+	oldAncientPath      string
+	newAncientPath      string
+	node                *node.Node
+	BlockAmountReserved uint64
+}
+
+func NewBlockPruner(n *node.Node, oldAncientPath, newAncientPath string, BlockAmountReserved uint64) *BlockPruner {
+	return &BlockPruner{
+		oldAncientPath:      oldAncientPath,
+		newAncientPath:      newAncientPath,
+		node:                n,
+		BlockAmountReserved: BlockAmountReserved,
+	}
+}
+
+// backupOldDb takes a backup of the old ancient db to a new ancient db. It moves the contents based on the
+// value of number of blocks to be reserved.
+func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
+	log.Info("Backup old ancientDB", "oldAncientPath", p.oldAncientPath, "newAncientPath", p.newAncientPath)
+	// Open old db wrapper.
+	chainDb, err := p.node.OpenDatabaseWithFreezer(name, cache, handles, p.oldAncientPath, namespace, readonly, true, interrupt)
+	if err != nil {
+		return fmt.Errorf("failed to open ancient database: %v", err)
+	}
+	defer chainDb.Close()
+
+	// Get the number of items in old ancient db.
+	itemsOfAncient, err := chainDb.ItemAmountInAncient()
+	log.Info("ChainDB opened successfully", "itemsOfAncient", itemsOfAncient)
+
+	// Abort if we can't access the freezer
+	if err != nil {
+		return fmt.Errorf("failed to access the freezer: %v", err)
+	}
+
+	// Also abort if it's empty
+	if itemsOfAncient == 0 {
+		return errors.New("freezer is empty, abort")
+	}
+
+	// If the items in freezer is less than the block amount that we want to reserve, it is not enough, should stop.
+	if itemsOfAncient < p.BlockAmountReserved {
+		return fmt.Errorf("the number of old blocks is not enough to reserve, ancientItems=%d, specifiedReservedBlockAmount=%d", itemsOfAncient, p.BlockAmountReserved)
+	} else if itemsOfAncient == p.BlockAmountReserved {
+		return fmt.Errorf("the number of old blocks is the same to reserved blocks, ancientItems=%d", itemsOfAncient)
+	}
+
+	var oldOffset uint64
+	if interrupt {
+		// The interrupt scecario within this function is specific for old and new ancientDB exsisted concurrently,
+		// should use last version of offset for oldAncientDB, because current offset is
+		// actually of the new ancientDB_Backup, but what we want is the offset of ancientDB being backup.
+		oldOffset = rawdb.ReadOffsetOfLastAncientFreezer(chainDb)
+	} else {
+		// Using current version of ancientDB for oldOffSet because the db for backup is current version.
+		oldOffset = rawdb.ReadOffsetOfCurrentAncientFreezer(chainDb)
+	}
+
+	// Get the start BlockNumber for pruning.
+	startBlockNumber := oldOffset + itemsOfAncient - p.BlockAmountReserved
+	log.Info("Prune info", "oldOffset", oldOffset, "newOffset", startBlockNumber)
+
+	// Create new ancientDB backup and record the new and last version of offset in kvDB as well.
+	// For every round, newoffset actually equals to the startBlockNumber in ancient backup db.
+	frdbBack, err := rawdb.NewDatabaseWithOnlyFreezer(chainDb, p.newAncientPath, namespace, readonly, startBlockNumber)
+	if err != nil {
+		return fmt.Errorf("failed to create ancient freezer backup: %v", err)
+	}
+	defer frdbBack.Close()
+
+	offsetBatch := chainDb.NewBatch()
+	rawdb.WriteOffsetOfCurrentAncientFreezer(offsetBatch, startBlockNumber)
+	rawdb.WriteOffsetOfLastAncientFreezer(offsetBatch, oldOffset)
+
+	if err := offsetBatch.Write(); err != nil {
+		log.Crit("Failed to write offset into disk", "err", err)
+	}
+
+	// It's guaranteed that the old/new offsets are updated as well as the new ancientDB are created if this flock exist.
+	lock, _, err := fileutil.Flock(filepath.Join(p.newAncientPath, "PRUNEFLOCKBACK"))
+	if err != nil {
+		return fmt.Errorf("file lock error: %v", err)
+	}
+
+	log.Info("Prune info", "old offset", oldOffset, "number of items in ancientDB", itemsOfAncient, "number of blocks to reserve", p.BlockAmountReserved)
+	log.Info("Record newOffset/newStartBlockNumber successfully", "newOffset", startBlockNumber)
+
+	writeBlock := func(blockNumber uint64) error {
+		// Read all block data
+		blockHash := rawdb.ReadCanonicalHash(chainDb, blockNumber)
+		block := rawdb.ReadBlock(chainDb, blockHash, blockNumber)
+		receipts := rawdb.ReadRawReceipts(chainDb, blockHash, blockNumber)
+		borReceipts := []*types.Receipt{rawdb.ReadRawBorReceipt(chainDb, blockHash, blockNumber)}
+
+		// Calculate the total difficulty of the block
+		td := rawdb.ReadTd(chainDb, blockHash, blockNumber)
+		if td == nil {
+			return consensus.ErrUnknownAncestor
+		}
+
+		// Write into new ancient_back db.
+		if _, err := rawdb.WriteAncientBlocks(frdbBack, []*types.Block{block}, []types.Receipts{receipts}, []types.Receipts{borReceipts}, td); err != nil {
+			return fmt.Errorf("failed to write new ancient error: %v", err)
+		}
+
+		return nil
+	}
+
+	start := time.Now()
+	// All ancient data after and including startBlockNumber should write into new ancientDB ancient_back.
+	for blockNumber := startBlockNumber; blockNumber < itemsOfAncient+oldOffset; blockNumber++ {
+		err := writeBlock(blockNumber)
+		if err != nil {
+			return err
+		}
+
+		// Print the log every 5s for better trace.
+		if time.Since(start) > 5*time.Second {
+			log.Info("Block backup process running successfully", "current blockNumber for backup", blockNumber)
+
+			start = time.Now()
+		}
+	}
+
+	if err = lock.Release(); err != nil {
+		return fmt.Errorf("failed to release file lock: %v", err)
+	}
+
+	log.Info("Backup old ancientDB done", "current start blockNumber in ancientDB", startBlockNumber)
+
+	return nil
+}
+
+// BlockPruneBackup backup the ancient data for the old ancient db, i.e. the most recent 128 blocks in ancient db.
+func (p *BlockPruner) BlockPruneBackup(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
+	start := time.Now()
+
+	if err := p.backupOldDb(name, cache, handles, namespace, readonly, interrupt); err != nil {
+		log.Error("Backup old ancientDB error", "err", err)
+		return err
+	}
+
+	log.Info("Block pruning backup successfully", "time duration since start is", common.PrettyDuration(time.Since(start)))
+
+	return nil
+}
+
+// RecoverInterruption handles the case when the block prune process was interrupted.
+func (p *BlockPruner) RecoverInterruption(name string, cache, handles int, namespace string, readonly bool) error {
+	log.Info("RecoverInterruption for block prune")
+
+	newExist, err := checkFileExist(p.newAncientPath)
+	if err != nil {
+		return fmt.Errorf("newAncientDB path error %v", err)
+	}
+
+	//nolint:nestif
+	if newExist {
+		log.Info("New ancientDB_backup existed in interruption scenario")
+
+		flockOfAncientBack, err := checkFileExist(filepath.Join(p.newAncientPath, "PRUNEFLOCKBACK"))
+		if err != nil {
+			return fmt.Errorf("failed to check flock of ancientDB_Back %v", err)
+		}
+
+		// Indicating both old and new ancientDB existed concurrently.
+		// Delete directly for the new ancientDB to prune from start, e.g.: path ../chaindb/ancient_backup
+		if err := os.RemoveAll(p.newAncientPath); err != nil {
+			return fmt.Errorf("failed to remove old ancient directory %v", err)
+		}
+
+		if flockOfAncientBack {
+			// Indicating the oldOffset/newOffset have already been updated.
+			if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, true); err != nil {
+				return err
+			}
+		} else {
+			// Indicating the flock did not exist and the new offset did not be updated, so just handle this case as usual.
+			if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, false); err != nil {
+				return err
+			}
+		}
+
+		if err := p.AncientDbReplacer(); err != nil {
+			return err
+		}
+	} else {
+		log.Info("New ancientDB_backup did not exist in interruption scenario")
+		// Indicating new ancientDB even did not be created, just prune starting at backup from startBlockNumber as usual,
+		// in this case, the new offset have not been written into kvDB.
+		if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, false); err != nil {
+			return err
+		}
+		if err := p.AncientDbReplacer(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func checkFileExist(path string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			// Indicating the file didn't exist.
+			return false, nil
+		}
+
+		return true, err
+	}
+
+	return true, nil
+}
+
+// AncientDbReplacer deletes the old ancient db and points the new db
+// to the old path.
+func (p *BlockPruner) AncientDbReplacer() error {
+	// Delete directly for the old ancientDB, e.g.: path ../chaindb/ancient
+	if err := os.RemoveAll(p.oldAncientPath); err != nil {
+		return fmt.Errorf("failed to remove old ancient directory %v", err)
+	}
+
+	// Rename the new ancientDB path same to the old
+	if err := os.Rename(p.newAncientPath, p.oldAncientPath); err != nil {
+		return fmt.Errorf("failed to rename new ancient directory %v", err)
+	}
+
+	log.Info("Replaced existing ancient db with pruned one")
+
+	return nil
+}
+
 // RecoverPruning will resume the pruning procedure during the system restart.
 // This function is used in this case: user tries to prune state data, but the
 // system was interrupted midway because of crash or manual-kill. In this case
@@ -361,7 +602,9 @@ func RecoverPruning(datadir string, db ethdb.Database) error {
 		NoBuild:    true,
 		AsyncBuild: false,
 	}
-	snaptree, err := snapshot.New(snapconfig, db, trie.NewDatabase(db), headBlock.Root())
+	// Offline pruning is only supported in legacy hash based scheme.
+	triedb := trie.NewDatabase(db, trie.HashDefaults)
+	snaptree, err := snapshot.New(snapconfig, db, triedb, headBlock.Root())
 	if err != nil {
 		return err // The relevant snapshot(s) might not exist
 	}
@@ -403,7 +646,7 @@ func extractGenesis(db ethdb.Database, stateBloom *stateBloom) error {
 	if genesis == nil {
 		return errors.New("missing genesis block")
 	}
-	t, err := trie.NewStateTrie(trie.StateTrieID(genesis.Root()), trie.NewDatabase(db))
+	t, err := trie.NewStateTrie(trie.StateTrieID(genesis.Root()), trie.NewDatabase(db, trie.HashDefaults))
 	if err != nil {
 		return err
 	}
@@ -427,7 +670,7 @@ func extractGenesis(db ethdb.Database, stateBloom *stateBloom) error {
 			}
 			if acc.Root != types.EmptyRootHash {
 				id := trie.StorageTrieID(genesis.Root(), common.BytesToHash(accIter.LeafKey()), acc.Root)
-				storageTrie, err := trie.NewStateTrie(id, trie.NewDatabase(db))
+				storageTrie, err := trie.NewStateTrie(id, trie.NewDatabase(db, trie.HashDefaults))
 				if err != nil {
 					return err
 				}

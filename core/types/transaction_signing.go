@@ -57,7 +57,7 @@ func MakeSigner(config *params.ChainConfig, blockNumber *big.Int, blockTime uint
 }
 
 // LatestSigner returns the 'most permissive' Signer available for the given chain
-// configuration. Specifically, this enables support of all types of transacrions
+// configuration. Specifically, this enables support of all types of transactions
 // when their respective forks are scheduled to occur at any block number (or time)
 // in the chain config.
 //
@@ -331,11 +331,7 @@ func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 	V, R, S := tx.RawSignatureValues()
 	switch tx.Type() {
 	case LegacyTxType:
-		if !tx.Protected() {
-			return HomesteadSigner{}.Sender(tx)
-		}
-		V = new(big.Int).Sub(V, s.chainIdMul)
-		V.Sub(V, big8)
+		return s.EIP155Signer.Sender(tx)
 	case AccessListTxType:
 		// AL txs are defined to use 0 and 1 as their recovery
 		// id, add 27 to become equivalent to unprotected Homestead signatures.
@@ -372,15 +368,7 @@ func (s eip2930Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *bi
 func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 	switch tx.Type() {
 	case LegacyTxType:
-		return rlpHash([]interface{}{
-			tx.Nonce(),
-			tx.GasPrice(),
-			tx.Gas(),
-			tx.To(),
-			tx.Value(),
-			tx.Data(),
-			s.chainId, uint(0), uint(0),
-		})
+		return s.EIP155Signer.Hash(tx)
 	case AccessListTxType:
 		return prefixedRlpHash(
 			tx.Type(),
@@ -593,4 +581,39 @@ func deriveChainId(v *big.Int) *big.Int {
 	}
 	v = new(big.Int).Sub(v, big.NewInt(35))
 	return v.Div(v, big.NewInt(2))
+}
+
+// FakeSigner implements the Signer interface and accepts unprotected transactions
+type FakeSigner struct{ londonSigner }
+
+var _ Signer = FakeSigner{}
+
+func NewFakeSigner(chainId *big.Int) Signer {
+	signer := NewLondonSigner(chainId)
+	ls, _ := signer.(londonSigner)
+	return FakeSigner{londonSigner: ls}
+}
+
+func (f FakeSigner) Sender(tx *Transaction) (common.Address, error) {
+	return f.londonSigner.Sender(tx)
+}
+
+func (f FakeSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *big.Int, err error) {
+	return f.londonSigner.SignatureValues(tx, sig)
+}
+
+func (f FakeSigner) ChainID() *big.Int {
+	return f.londonSigner.ChainID()
+}
+
+// Hash returns 'signature hash', i.e. the transaction hash that is signed by the
+// private key. This hash does not uniquely identify the transaction.
+func (f FakeSigner) Hash(tx *Transaction) common.Hash {
+	return f.londonSigner.Hash(tx)
+}
+
+// Equal returns true if the given signer is the same as the receiver.
+func (f FakeSigner) Equal(Signer) bool {
+	// Always return true
+	return true
 }

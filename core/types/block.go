@@ -99,6 +99,9 @@ type Header struct {
 
 	// ExcessBlobGas was added by EIP-4844 and is ignored in legacy headers.
 	ExcessBlobGas *uint64 `json:"excessBlobGas" rlp:"optional"`
+
+	// ParentBeaconRoot was added by EIP-4788 and is ignored in legacy headers.
+	ParentBeaconRoot *common.Hash `json:"parentBeaconBlockRoot" rlp:"optional"`
 }
 
 // Used for Encoding and Decoding of the Extra Data Field
@@ -186,8 +189,8 @@ func (h *Header) EmptyReceipts() bool {
 	return h.ReceiptHash == EmptyReceiptsHash
 }
 
-// ValidateBlockNumberOptions4337 validates the block range passed as in the options parameter in the conditional transaction (EIP-4337)
-func (h *Header) ValidateBlockNumberOptions4337(minBlockNumber *big.Int, maxBlockNumber *big.Int) error {
+// ValidateBlockNumberOptionsPIP15 validates the block range passed as in the options parameter in the conditional transaction (PIP-15)
+func (h *Header) ValidateBlockNumberOptionsPIP15(minBlockNumber *big.Int, maxBlockNumber *big.Int) error {
 	currentBlockNumber := h.Number
 
 	if minBlockNumber != nil {
@@ -205,8 +208,8 @@ func (h *Header) ValidateBlockNumberOptions4337(minBlockNumber *big.Int, maxBloc
 	return nil
 }
 
-// ValidateBlockNumberOptions4337 validates the timestamp range passed as in the options parameter in the conditional transaction (EIP-4337)
-func (h *Header) ValidateTimestampOptions4337(minTimestamp *uint64, maxTimestamp *uint64) error {
+// ValidateBlockNumberOptionsPIP15 validates the timestamp range passed as in the options parameter in the conditional transaction (PIP-15)
+func (h *Header) ValidateTimestampOptionsPIP15(minTimestamp *uint64, maxTimestamp *uint64) error {
 	currentBlockTime := h.Time
 
 	if minTimestamp != nil {
@@ -365,6 +368,10 @@ func CopyHeader(h *Header) *Header {
 		cpy.BlobGasUsed = new(uint64)
 		*cpy.BlobGasUsed = *h.BlobGasUsed
 	}
+	if h.ParentBeaconRoot != nil {
+		cpy.ParentBeaconRoot = new(common.Hash)
+		*cpy.ParentBeaconRoot = *h.ParentBeaconRoot
+	}
 	return &cpy
 }
 
@@ -483,6 +490,8 @@ func (b *Block) BaseFee() *big.Int {
 
 	return new(big.Int).Set(b.header.BaseFee)
 }
+
+func (b *Block) BeaconRoot() *common.Hash { return b.header.ParentBeaconRoot }
 
 func (b *Block) ExcessBlobGas() *uint64 {
 	var excessBlobGas *uint64

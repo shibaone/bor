@@ -31,7 +31,6 @@ var shibarium = &Chain{
 			Bor: &params.BorConfig{
 				JaipurBlock: big.NewInt(0),
 				DelhiBlock:  big.NewInt(4504576),
-				// ParallelUniverseBlock: big.NewInt(0),
 				IndoreBlock: big.NewInt(4504640),
 				StateSyncConfirmationDelay: map[string]uint64{
 					"4504640": 128,

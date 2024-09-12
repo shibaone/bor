@@ -10,7 +10,6 @@ start_time=$SECONDS
 
 while true
 do
-
     balance=$(docker exec bor0 bash -c "bor attach /var/lib/bor/data/bor.ipc -exec 'Math.round(web3.fromWei(eth.getBalance(eth.accounts[0])))'")
 
     if ! [[ "$balance" =~ ^[0-9]+$ ]]; then

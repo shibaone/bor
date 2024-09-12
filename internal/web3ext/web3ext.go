@@ -565,6 +565,11 @@ web3._extend({
 			call: 'debug_getTrieFlushInterval',
 			params: 0
 		}),
+		new web3._extend.Method({
+			name: 'peerStats',
+			call: 'debug_peerStats',
+			params: 0
+		}),
 	],
 	properties: []
 });
@@ -685,6 +690,11 @@ web3._extend({
 			call: 'eth_call',
 			params: 4,
 			inputFormatter: [web3._extend.formatters.inputCallFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter, null, null],
+		}),
+		new web3._extend.Method({
+			name: 'getBlockReceipts',
+			call: 'eth_getBlockReceipts',
+			params: 1,
 		}),
 	],
 	properties: [

@@ -38,7 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/les"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
@@ -82,9 +81,8 @@ type backend interface {
 // reporting to ethstats
 type fullNodeBackend interface {
 	backend
-	Miner() *miner.Miner
 	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
-	CurrentBlock() *types.Block
+	CurrentBlock() *types.Header
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
 }
 
@@ -100,6 +98,13 @@ func (e *EthstatsDataType) AddKV(key, val string) {
 // Arbitrary Data that can be included
 var EthstatsData = &EthstatsDataType{
 	kv: make(map[string]string),
+}
+
+// miningNodeBackend encompasses the functionality necessary for a mining node
+// reporting to ethstats
+type miningNodeBackend interface {
+	fullNodeBackend
+	Miner() *miner.Miner
 }
 
 // Service implements an Ethereum netstats reporting daemon that pushes local
@@ -547,7 +552,7 @@ func (s *Service) login(conn *connWrapper) error {
 	if info := infos.Protocols["eth"]; info != nil {
 		network = fmt.Sprintf("%d", info.(*ethproto.NodeInfo).Network)
 	} else {
-		network = fmt.Sprintf("%d", infos.Protocols["les"].(*les.NodeInfo).Network)
+		return errors.New("no eth protocol available")
 	}
 
 	auth := &authMsg{
@@ -684,6 +689,11 @@ func (s *Service) reportBlock(conn *connWrapper, block *types.Block) error {
 	// Gather the block details from the header or block chain
 	details := s.assembleBlockStats(block)
 
+	// Short circuit if the block detail is not available.
+	if details == nil {
+		return nil
+	}
+
 	// Assemble the block report and send it to the server
 	log.Trace("Sending new block to ethstats", "number", details.Number, "hash", details.Hash)
 
@@ -707,13 +717,27 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		td     *big.Int
 		txs    []txStats
 		uncles []*types.Header
+		err    error
 	)
 
 	// check if backend is a full node
 	fullBackend, ok := s.backend.(fullNodeBackend)
 	if ok {
 		if block == nil {
-			block = fullBackend.CurrentBlock()
+			head := fullBackend.CurrentBlock()
+			block, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(head.Number.Uint64()))
+			// Short circuit if no block is available. It might happen when
+			// the blockchain is reorging.
+			if err != nil {
+				log.Error("Failed to retrieve block by number", "err", err)
+				return nil
+			}
+		}
+
+		// It's weird, but it's possible that the block is nil here.
+		// even though the check for error is done above.
+		if block == nil {
+			return nil
 		}
 
 		header = block.Header()
@@ -785,8 +809,12 @@ func (s *Service) reportHistory(conn *connWrapper, list []uint64) error {
 		fullBackend, ok := s.backend.(fullNodeBackend)
 		// Retrieve the next block if it's known to us
 		var block *types.Block
+		var err error
 		if ok {
-			block, _ = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(number)) // TODO ignore error here ?
+			block, err = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(number))
+			if err != nil {
+				log.Error("Failed to retrieve block by number", "err", err)
+			}
 		} else {
 			if header, _ := s.backend.HeaderByNumber(context.Background(), rpc.BlockNumber(number)); header != nil {
 				block = types.NewBlockWithHeader(header)
@@ -914,10 +942,11 @@ func (s *Service) reportStats(conn *connWrapper) error {
 		gasprice int
 	)
 	// check if backend is a full node
-	fullBackend, ok := s.backend.(fullNodeBackend)
-	if ok {
-		mining = fullBackend.Miner().Mining()
-		hashrate = int(fullBackend.Miner().Hashrate())
+	if fullBackend, ok := s.backend.(fullNodeBackend); ok {
+		if miningBackend, ok := s.backend.(miningNodeBackend); ok {
+			mining = miningBackend.Miner().Mining()
+			hashrate = int(miningBackend.Miner().Hashrate())
+		}
 
 		sync := fullBackend.SyncProgress()
 		syncing = fullBackend.CurrentHeader().Number.Uint64() >= sync.HighestBlock

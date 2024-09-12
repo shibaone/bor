@@ -125,7 +125,7 @@ func TestFreezerModifyRollback(t *testing.T) {
 	// Reopen and check that the rolled-back data doesn't reappear.
 	tables := map[string]bool{"test": true}
 
-	f2, err := NewFreezer(dir, "", false, 2049, tables)
+	f2, err := NewFreezer(dir, "", false, 0, 2049, tables)
 	if err != nil {
 		t.Fatalf("can't reopen freezer after failed ModifyAncients: %v", err)
 	}
@@ -284,20 +284,20 @@ func TestFreezerReadonlyValidate(t *testing.T) {
 	dir := t.TempDir()
 	// Open non-readonly freezer and fill individual tables
 	// with different amount of data.
-	f, err := NewFreezer(dir, "", false, 2049, tables)
+	f, err := NewFreezer(dir, "", false, 0, 2049, tables)
 	if err != nil {
 		t.Fatal("can't open freezer", err)
 	}
 
 	var item = make([]byte, 1024)
 
-	aBatch := f.tables["a"].newBatch()
+	aBatch := f.tables["a"].newBatch(0)
 	require.NoError(t, aBatch.AppendRaw(0, item))
 	require.NoError(t, aBatch.AppendRaw(1, item))
 	require.NoError(t, aBatch.AppendRaw(2, item))
 	require.NoError(t, aBatch.commit())
 
-	bBatch := f.tables["b"].newBatch()
+	bBatch := f.tables["b"].newBatch(0)
 	require.NoError(t, bBatch.AppendRaw(0, item))
 	require.NoError(t, bBatch.commit())
 
@@ -313,9 +313,60 @@ func TestFreezerReadonlyValidate(t *testing.T) {
 
 	// Re-openening as readonly should fail when validating
 	// table lengths.
-	_, err = NewFreezer(dir, "", true, 2049, tables)
+	_, err = NewFreezer(dir, "", true, 0, 2049, tables)
 	if err == nil {
 		t.Fatal("readonly freezer should fail with differing table lengths")
+	}
+}
+
+func TestFreezerConcurrentReadonly(t *testing.T) {
+	t.Parallel()
+
+	tables := map[string]bool{"a": true}
+	dir := t.TempDir()
+
+	f, err := NewFreezer(dir, "", false, 0, 2049, tables)
+	if err != nil {
+		t.Fatal("can't open freezer", err)
+	}
+	var item = make([]byte, 1024)
+	batch := f.tables["a"].newBatch(0)
+	items := uint64(10)
+	for i := uint64(0); i < items; i++ {
+		require.NoError(t, batch.AppendRaw(i, item))
+	}
+	require.NoError(t, batch.commit())
+	if loaded := f.tables["a"].items.Load(); loaded != items {
+		t.Fatalf("unexpected number of items in table, want: %d, have: %d", items, loaded)
+	}
+	require.NoError(t, f.Close())
+
+	var (
+		wg   sync.WaitGroup
+		fs   = make([]*Freezer, 5)
+		errs = make([]error, 5)
+	)
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			f, err := NewFreezer(dir, "", true, 0, 2049, tables)
+			if err == nil {
+				fs[i] = f
+			} else {
+				errs[i] = err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i := range fs {
+		if err := errs[i]; err != nil {
+			t.Fatal("failed to open freezer", err)
+		}
+		require.NoError(t, fs[i].Close())
 	}
 }
 
@@ -325,7 +376,7 @@ func newFreezerForTesting(t *testing.T, tables map[string]bool) (*Freezer, strin
 	dir := t.TempDir()
 	// note: using low max table size here to ensure the tests actually
 	// switch between multiple files.
-	f, err := NewFreezer(dir, "", false, 2049, tables)
+	f, err := NewFreezer(dir, "", false, 0, 2049, tables)
 	if err != nil {
 		t.Fatal("can't open freezer", err)
 	}

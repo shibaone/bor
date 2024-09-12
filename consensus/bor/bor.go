@@ -462,31 +462,32 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return err
 	}
 
+	// Doesn't work 100%, Will uncomment after fixing
 	// Verify the validator list match the local contract
-	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
+	// if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+	// 	newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
 
-		if err != nil {
-			return err
-		}
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		sort.Sort(valset.ValidatorsByAddress(newValidators))
+	// 	sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
-		if err != nil {
-			return err
-		}
+	// 	headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.config))
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		if len(newValidators) != len(headerVals) {
-			return errInvalidSpanValidators
-		}
+	// 	if len(newValidators) != len(headerVals) {
+	// 		return errInvalidSpanValidators
+	// 	}
 
-		for i, val := range newValidators {
-			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
-				return errInvalidSpanValidators
-			}
-		}
-	}
+	// 	for i, val := range newValidators {
+	// 		if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+	// 			return errInvalidSpanValidators
+	// 		}
+	// 	}
+	// }
 
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
@@ -883,6 +884,10 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 			for addr, account := range allocs {
 				log.Info("change contract code", "address", addr)
 				state.SetCode(addr, account.Code)
+
+				if state.GetBalance(addr).Cmp(big.NewInt(0)) == 0 {
+					state.SetBalance(addr, account.Balance)
+				}
 			}
 		}
 	}

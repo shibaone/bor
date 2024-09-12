@@ -1280,7 +1280,7 @@ func doCallWithState(ctx context.Context, b Backend, args TransactionArgs, heade
 	if blockOverrides != nil {
 		blockOverrides.Apply(&blockCtx)
 	}
-	evm, vmError := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true, IsGasEstimation: isGasEstimation, IsEthCall: isEthCall}, &blockCtx)
+	evm := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true, IsGasEstimation: isGasEstimation, IsEthCall: isEthCall}, &blockCtx)
 
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
@@ -1414,9 +1414,9 @@ func (s *BlockChainAPI) CallWithState(ctx context.Context, args TransactionArgs,
 func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride, gasCap uint64) (hexutil.Uint64, error) {
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
-		lo  uint64 = params.TxGas - 1
-		hi  uint64
-		cap uint64
+		// lo  uint64 = params.TxGas - 1
+		hi uint64
+		// cap uint64
 	)
 	// Use zero address if sender unspecified.
 	if args.From == nil {
@@ -1492,23 +1492,23 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 		hi = gasCap
 	}
 
-	cap = hi
+	//cap = hi
 
 	// Create a helper to check if a gas allowance results in an executable transaction
-	executable := func(gas uint64, state *state.StateDB, header *types.Header) (bool, *core.ExecutionResult, error) {
-		args.Gas = (*hexutil.Uint64)(&gas)
+	// executable := func(gas uint64, state *state.StateDB, header *types.Header) (bool, *core.ExecutionResult, error) {
+	// 	args.Gas = (*hexutil.Uint64)(&gas)
 
-		result, err := doCall(ctx, b, args, state, header, nil, nil, 0, gasCap, true, false)
-		if err != nil {
-			if errors.Is(err, core.ErrIntrinsicGas) {
-				return true, nil, nil // Special case, raise gas limit
-			}
+	// 	result, err := doCall(ctx, b, args, state, header, nil, nil, 0, gasCap, true, false)
+	// 	if err != nil {
+	// 		if errors.Is(err, core.ErrIntrinsicGas) {
+	// 			return true, nil, nil // Special case, raise gas limit
+	// 		}
 
-			return true, nil, err // Bail out
-		}
+	// 		return true, nil, err // Bail out
+	// 	}
 
-		return result.Failed(), result, nil
-	}
+	// 	return result.Failed(), result, nil
+	// }
 	// Retrieve the base state and mutate it with any overrides
 	state, header, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {

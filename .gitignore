@@ -14,9 +14,9 @@
 */**/*tx_database*
 */**/*dapps*
 build/_vendor/pkg
-
+tests/kms/
 cover.out
-
+bor/
 #*
 .#*
 *#

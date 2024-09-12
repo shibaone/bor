@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/zama-ai/fhevm-go/fhevm"
 
 	lru "github.com/hashicorp/golang-lru"
 )
@@ -52,6 +53,11 @@ type Config struct {
 	NoBaseFee               bool      // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
 	EnablePreimageRecording bool      // Enables recording of SHA3/keccak preimages
 	ExtraEips               []int     // Additional EIPS that are to be enabled
+	// parallel EVM configs
+	ParallelEnable               bool
+	ParallelSpeculativeProcesses int
+	IsEthCall                    bool
+	IsGasEstimation              bool
 }
 
 // ScopeContext contains the things that are per-call, such as stack and memory,
@@ -60,6 +66,21 @@ type ScopeContext struct {
 	Memory   *Memory
 	Stack    *Stack
 	Contract *Contract
+}
+
+// GetContract implements fhevm.ScopeContext.
+func (s *ScopeContext) GetContract() fhevm.Contract {
+	return s.Contract
+}
+
+// GetMemory implements fhevm.ScopeContext.
+func (s *ScopeContext) GetMemory() fhevm.Memory {
+	return s.Memory
+}
+
+// GetStack implements fhevm.ScopeContext.
+func (s *ScopeContext) GetStack() fhevm.Stack {
+	return s.Stack
 }
 
 // EVMInterpreter represents an EVM interpreter

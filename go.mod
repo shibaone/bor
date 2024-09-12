@@ -102,6 +102,7 @@ require (
 )
 
 require (
+	cloud.google.com/go/compute v1.23.0 // indirect
 	cloud.google.com/go/iam v1.1.6 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -294,5 +295,7 @@ replace github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.3.2
 
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
+
+replace github.com/zama-ai/fhevm-go v0.5.0 => ../fhevm-go
 
 replace go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.14.0

@@ -9,8 +9,8 @@ sprintSize:
 blockNumber:
   - '0'
 blockTime:
-  - '2'
-numOfBorValidators: 3
+  - '5'
+numOfBorValidators: 2
 numOfBorSentries: 0
 numOfBorArchiveNodes: 0
 numOfErigonValidators: 0

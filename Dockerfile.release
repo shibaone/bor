@@ -11,5 +11,5 @@ COPY bor /usr/bin/
 COPY builder/files/genesis-shibarium.json ${BOR_DIR}
 COPY builder/files/genesis-puppynet.json ${BOR_DIR}
 
-EXPOSE 8545 8546 8547 30303 30303/udp
+EXPOSE 8545 8546 30303 30303/udp
 ENTRYPOINT ["bor"]

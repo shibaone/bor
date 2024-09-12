@@ -84,6 +84,7 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0
 	github.com/urfave/cli/v2 v2.27.2
 	github.com/xsleonard/go-merkle v1.1.0
+	github.com/zama-ai/fhevm-go v0.5.0
 	go.opentelemetry.io/otel v1.27.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.27.0
 	go.opentelemetry.io/otel/sdk v1.27.0
@@ -102,7 +103,6 @@ require (
 )
 
 require (
-	cloud.google.com/go/compute v1.23.0 // indirect
 	cloud.google.com/go/iam v1.1.6 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

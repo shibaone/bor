@@ -741,6 +741,8 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 			return errUnknownValidators
 		}
 
+		log.Info("New validators", "number", number, "validators", newValidators)
+
 		// sort validator by address
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
@@ -750,6 +752,8 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 			for _, validator := range newValidators {
 				tempValidatorBytes = append(tempValidatorBytes, validator.HeaderBytes()...)
 			}
+
+			log.Info("New validators", "number", number, "validatorBytes", hex.EncodeToString(tempValidatorBytes))
 
 			blockExtraData := &types.BlockExtraData{
 				ValidatorBytes: tempValidatorBytes,
@@ -762,7 +766,11 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 				return fmt.Errorf("error while encoding block extra data: %v", err)
 			}
 
+			log.Info("New validators", "number", number, "blockExtraDataBytes", hex.EncodeToString(blockExtraDataBytes))
+
 			header.Extra = append(header.Extra, blockExtraDataBytes...)
+
+			log.Info("New validators", "number", number, "header.Extra.ValidatorBytes", hex.EncodeToString(header.Extra))
 		} else {
 			for _, validator := range newValidators {
 				header.Extra = append(header.Extra, validator.HeaderBytes()...)

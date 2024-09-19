@@ -770,7 +770,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 			header.Extra = append(header.Extra, blockExtraDataBytes...)
 
-			log.Info("New validators", "number", number, "header.Extra.ValidatorBytes", hex.EncodeToString(header.Extra))
+			log.Info("New validators", "number", number, "header.Extra", hex.EncodeToString(header.Extra))
 		} else {
 			for _, validator := range newValidators {
 				header.Extra = append(header.Extra, validator.HeaderBytes()...)

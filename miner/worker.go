@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -1112,7 +1113,11 @@ mainloop:
 		tempVanity := env.header.Extra[:types.ExtraVanityLength]
 		tempSeal := env.header.Extra[len(env.header.Extra)-types.ExtraSealLength:]
 
+		log.Info("Block STM", "number", env.header.Number.Uint64(), "tempVanity", hex.EncodeToString(tempVanity))
+		log.Info("Block STM", "number", env.header.Number.Uint64(), "tempSeal", hex.EncodeToString(tempSeal))
+
 		if len(env.mvReadMapList) > 0 {
+			log.Info("Block STM", "number", env.header.Number.Uint64(), "Dependency", "Yes")
 			tempDeps := make([][]uint64, len(env.mvReadMapList))
 
 			for j := range deps[0] {
@@ -1148,6 +1153,7 @@ mainloop:
 				blockExtraData.TxDependency = nil
 			}
 		} else {
+			log.Info("Block STM", "number", env.header.Number.Uint64(), "Dependency", "No")
 			blockExtraData.TxDependency = nil
 		}
 
@@ -1157,11 +1163,15 @@ mainloop:
 			return err
 		}
 
+		log.Info("Block STM", "number", env.header.Number.Uint64(), "blockExtraDataBytes", hex.EncodeToString(blockExtraDataBytes))
+
 		env.header.Extra = []byte{}
 
 		env.header.Extra = append(tempVanity, blockExtraDataBytes...)
 
 		env.header.Extra = append(env.header.Extra, tempSeal...)
+
+		log.Info("Block STM", "number", env.header.Number.Uint64(), "env.header.Extra", hex.EncodeToString(env.header.Extra))
 	}
 
 	if !w.IsRunning() && len(coalescedLogs) > 0 {

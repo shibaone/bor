@@ -1306,6 +1306,12 @@ func (pool *TxPool) addTx(tx *types.Transaction, local, sync bool) error {
 			return
 		}
 
+		if err = pool.validateTxBasics(tx, local); err != nil {
+			invalidTxMeter.Mark(1)
+
+			return
+		}
+
 		// Exclude transactions with invalid signatures as soon as
 		// possible and cache senders in transactions before
 		// obtaining lock

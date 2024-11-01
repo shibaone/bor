@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -1137,10 +1138,14 @@ mainloop:
 				}
 			}
 
+			log.Info("Worker Header 1 ", env.header.Number.Uint64(), "ValidatorBytes", hex.EncodeToString(env.header.Extra[types.ExtraVanityLength:len(env.header.Extra)-types.ExtraSealLength]))
+
 			if err := rlp.DecodeBytes(env.header.Extra[types.ExtraVanityLength:len(env.header.Extra)-types.ExtraSealLength], &blockExtraData); err != nil {
 				log.Error("error while decoding block extra data", "err", err)
 				return err
 			}
+
+			log.Info("Worker Header 2 ", env.header.Number.Uint64(), "ValidatorBytes", hex.EncodeToString(blockExtraData.ValidatorBytes))
 
 			if delayFlag {
 				blockExtraData.TxDependency = tempDeps
@@ -1156,6 +1161,8 @@ mainloop:
 			log.Error("error while encoding block extra data: %v", err)
 			return err
 		}
+
+		log.Info("Header ", env.header.Number.Uint64(), "ValidatorBytes", hex.EncodeToString(blockExtraData.ValidatorBytes), "TxDependency", blockExtraData.TxDependency)
 
 		env.header.Extra = []byte{}
 

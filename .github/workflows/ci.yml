@@ -23,7 +23,7 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - run: |
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
@@ -55,7 +55,7 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - run: |
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
@@ -83,7 +83,7 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - run: |
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
@@ -107,7 +107,7 @@ jobs:
 
         - name: Test
           run: make test
-        
+
         - uses: actions/upload-artifact@v4.4.0
           with:
             name: unitTest-coverage
@@ -134,7 +134,7 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - run: |
             git submodule update --init --recursive --force
             git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
@@ -147,7 +147,7 @@ jobs:
           if: runner.os == 'Linux'
           run: sudo apt update && sudo apt install build-essential
 
-        - uses: actions/cache@v3
+        - uses: actions/cache@v4
           with:
             path: |
               ~/.cache/go-build
@@ -173,7 +173,7 @@ jobs:
     needs: [unit-tests, integration-tests]
     steps:
         - name: Checkout
-          uses: actions/checkout@v3
+          uses: actions/checkout@v4
         - name: Download artifacts
           uses: actions/download-artifact@v4.1.8
         - name: Upload coverage to Codecov
@@ -186,7 +186,7 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
           with:
             path: bor
         - name: Checkout submodules
@@ -200,7 +200,7 @@ jobs:
             go-version: 1.22.x
 
         - name: Checkout matic-cli
-          uses: actions/checkout@v3
+          uses: actions/checkout@v4
           with:
             repository: maticnetwork/matic-cli
             ref: master

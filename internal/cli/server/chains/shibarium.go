@@ -28,6 +28,7 @@ var shibarium = &Chain{
 			BerlinBlock:         big.NewInt(0),
 			LondonBlock:         big.NewInt(0),
 			ShanghaiBlock:       big.NewInt(4504704),
+			CancunBlock:         big.NewInt(8200512),
 			Bor: &params.BorConfig{
 				JaipurBlock: big.NewInt(0),
 				DelhiBlock:  big.NewInt(4504576),
@@ -60,6 +61,7 @@ var shibarium = &Chain{
 				BurntContract: map[string]string{
 					"0":       "0x000000000000000000000000000000000000dead",
 					"1962000": "0xc7D0445ac2947760b3dD388B8586Adf079972Bf3",
+					"8200512": "0x541F60e5576764cA3957f70b6a1E60f3CE5886e0",
 				},
 				BlockAlloc: map[string]interface{}{
 					"4504704": map[string]interface{}{

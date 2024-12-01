@@ -14,6 +14,7 @@
       "berlinBlock": 0,
       "londonBlock": 0,
       "shanghaiBlock": 4504704,
+      "cancunBlock": 8200512,
       "bor": {
         "jaipurBlock": 0,
         "delhiBlock": 4504576,
@@ -42,7 +43,8 @@
         },
         "burntContract": {
           "0": "0x000000000000000000000000000000000000dead",
-          "1962000": "0xc7D0445ac2947760b3dD388B8586Adf079972Bf3"
+          "1962000": "0xc7D0445ac2947760b3dD388B8586Adf079972Bf3",
+          "8200512": "0x541F60e5576764cA3957f70b6a1E60f3CE5886e0"
         },
         "blockAlloc": {
           "4504704": {

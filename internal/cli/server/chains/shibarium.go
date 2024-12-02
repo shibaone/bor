@@ -61,6 +61,7 @@ var shibarium = &Chain{
 				BurntContract: map[string]string{
 					"0":       "0x000000000000000000000000000000000000dead",
 					"1962000": "0xc7D0445ac2947760b3dD388B8586Adf079972Bf3",
+					"6206570": "0x2E241D15A5A3438bd7a51424991f1A788a01A8F8",
 					"8200512": "0x541F60e5576764cA3957f70b6a1E60f3CE5886e0",
 				},
 				BlockAlloc: map[string]interface{}{

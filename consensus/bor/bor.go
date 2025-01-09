@@ -756,8 +756,6 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 				TxDependency:   nil,
 			}
 
-			log.Info("Sprint Header", number, "ValidatorBytes", hex.EncodeToString(blockExtraData.ValidatorBytes), "TxDependency", blockExtraData.TxDependency)
-
 			blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
 			if err != nil {
 				log.Error("error while encoding block extra data: %v", err)
@@ -775,8 +773,6 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 			ValidatorBytes: nil,
 			TxDependency:   nil,
 		}
-
-		log.Info("Cancun Header ", number, "ValidatorBytes", hex.EncodeToString(blockExtraData.ValidatorBytes), "TxDependency", blockExtraData.TxDependency)
 
 		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
 		if err != nil {

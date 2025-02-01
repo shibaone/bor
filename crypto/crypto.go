@@ -179,9 +179,6 @@ func FromECDSA(priv *ecdsa.PrivateKey) []byte {
 	if priv == nil {
 		return nil
 	}
-	if !S256().IsOnCurve(x, y) {
-		return nil, errInvalidPubkey
-	}
 
 	return math.PaddedBigBytes(priv.D, priv.Params().BitSize/8)
 }
@@ -190,6 +187,9 @@ func FromECDSA(priv *ecdsa.PrivateKey) []byte {
 func UnmarshalPubkey(pub []byte) (*ecdsa.PublicKey, error) {
 	x, y := S256().Unmarshal(pub)
 	if x == nil {
+		return nil, errInvalidPubkey
+	}
+	if !S256().IsOnCurve(x, y) {
 		return nil, errInvalidPubkey
 	}
 

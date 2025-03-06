@@ -7,10 +7,10 @@ borChainId: 15001
 heimdallChainId: heimdall-15001
 
 borDockerBuildContext: '../../bor'
-heimdallDockerBuildContext: 'https://github.com/maticnetwork/heimdall.git#develop'
+heimdallDockerBuildContext: 'https://github.com/shibaone/heimdall.git#develop'
 
 genesisContractsBranch: master
-contractsRepo: https://github.com/0xPolygon/pos-contracts.git
+contractsRepo: https://github.com/shibaone/pos-contracts.git
 contractsBranch: anvil-pos
 
 blockTime:

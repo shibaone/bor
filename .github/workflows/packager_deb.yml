@@ -30,7 +30,7 @@ jobs:
         run: echo "GIT_TAG=`echo $(git describe --tags --abbrev=0)`" >> $GITHUB_ENV
       - name: adding version
         run: |
-          NUMERIC_VERSION=$( echo ${{ env.GIT_TAG }} | sed 's/[^0-9.]//g' ) 
+          NUMERIC_VERSION=$( echo ${{ env.GIT_TAG }} | sed 's/[^0-9.]//g' )
           echo "VERSION=$NUMERIC_VERSION" >> $GITHUB_ENV
 
       - name: Cleaning repo
@@ -54,7 +54,7 @@ jobs:
           echo "Section: base" >> packaging/deb/bor/DEBIAN/control
           echo "Priority: optional" >> packaging/deb/bor/DEBIAN/control
           echo "Architecture: amd64" >> packaging/deb/bor/DEBIAN/control
-          echo "Maintainer: devops@polygon.technology" >> packaging/deb/bor/DEBIAN/control
+          echo "Maintainer: aws@shib.io" >> packaging/deb/bor/DEBIAN/control
           echo "Description: bor binary package" >> packaging/deb/bor/DEBIAN/control
 
       - name: Creating package for binary for bor ${{ env.ARCH }}
@@ -94,7 +94,7 @@ jobs:
           echo "Section: base" >> packaging/deb/bor/DEBIAN/control
           echo "Priority: optional" >> packaging/deb/bor/DEBIAN/control
           echo "Architecture: arm64" >> packaging/deb/bor/DEBIAN/control
-          echo "Maintainer: devops@polygon.technology" >> packaging/deb/bor/DEBIAN/control
+          echo "Maintainer: aws@shib.io" >> packaging/deb/bor/DEBIAN/control
           echo "Description: bor binary package" >> packaging/deb/bor/DEBIAN/control
 
       - name: Creating package for binary for bor ${{ env.ARCH }}

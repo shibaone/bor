@@ -20,9 +20,11 @@ type Chain struct {
 }
 
 var chains = map[string]*Chain{
-	"mainnet": mainnetBor,
-	"mumbai":  mumbaiTestnet,
-	"amoy":    amoyTestnet,
+	"mainnet":   mainnetBor,
+	"mumbai":    mumbaiTestnet,
+	"amoy":      amoyTestnet,
+	"shibarium": shibarium,
+	"puppynet":  puppynet,
 }
 
 func GetChain(name string) (*Chain, error) {

@@ -471,10 +471,10 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// Retrieve the snapshot needed to verify this header and cache it
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
-	if err != nil {
-		return err
-	}
+	// snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// Verify if the producer set in header's extra data matches with the list in span.
 	// We skip the check for 0th span as the producer set in contract v/s producer set
@@ -494,41 +494,51 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		}
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
-		if err != nil {
-			return err
-		}
+	// Verify the validator list match the local contract
+	// if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+	// 	newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
 
-		if len(newValidators) != len(headerVals) {
-			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
-			return errInvalidSpanValidators
-		}
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-		for i, val := range newValidators {
-			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
-				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
-				return errInvalidSpanValidators
-			}
-		}
-	}
+	// 	sort.Sort(valset.ValidatorsByAddress(newValidators))
+
+	// 	headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	if len(newValidators) != len(headerVals) {
+	// 		log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
+	// 		return errInvalidSpanValidators
+	// 	}
+
+	// 	for i, val := range newValidators {
+	// 		if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+	// 			log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
+	// 			return errInvalidSpanValidators
+	// 		}
+	// 	}
+	// }
 
 	// verify the validator list in the last sprint block
-	if IsSprintStart(number, c.config.CalculateSprint(number)) {
-		parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
-		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
+	// if IsSprintStart(number, c.config.CalculateSprint(number)) {
+	// 	parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
+	// 	validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
-		currentValidators := snap.ValidatorSet.Copy().Validators
-		// sort validator by address
-		sort.Sort(valset.ValidatorsByAddress(currentValidators))
+	// 	currentValidators := snap.ValidatorSet.Copy().Validators
+	// 	// sort validator by address
+	// 	sort.Sort(valset.ValidatorsByAddress(currentValidators))
 
-		for i, validator := range currentValidators {
-			copy(validatorsBytes[i*validatorHeaderBytesLength:], validator.HeaderBytes())
-		}
-		// len(header.Extra) >= extraVanity+extraSeal has already been validated in validateHeaderExtraField, so this won't result in a panic
-		if !bytes.Equal(parentValidatorBytes, validatorsBytes) {
-			return &MismatchingValidatorsError{number - 1, validatorsBytes, parentValidatorBytes}
-		}
-	}
+	// 	for i, validator := range currentValidators {
+	// 		copy(validatorsBytes[i*validatorHeaderBytesLength:], validator.HeaderBytes())
+	// 	}
+	// 	// len(header.Extra) >= extraVanity+extraSeal has already been validated in validateHeaderExtraField, so this won't result in a panic
+	// 	if !bytes.Equal(parentValidatorBytes, validatorsBytes) {
+	// 		return &MismatchingValidatorsError{number - 1, validatorsBytes, parentValidatorBytes}
+	// 	}
+	// }
 
 	// All basic checks passed, verify the seal and return
 	return c.verifySeal(chain, header, parents)

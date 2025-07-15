@@ -34,6 +34,9 @@ jobs:
 
       - name: Pre kurtosis run
         uses: ./bor/.github/actions/kurtosis-pre-run
+        with:
+          docker_username: ${{ secrets.DOCKERHUB }}
+          docker_token: ${{ secrets.DOCKERHUB_KEY }}
 
       - name: Build Bor Docker Image
         run: |

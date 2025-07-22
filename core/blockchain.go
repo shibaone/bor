@@ -2676,6 +2676,15 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		computeWitness := makeWitness
 
 		if witnesses != nil && len(witnesses) > it.processed()-1 && witnesses[it.processed()-1] != nil {
+			// 1. Validate the witness.
+			if err := stateless.ValidateWitnessPreState(witnesses[it.processed()-1], bc); err != nil {
+				log.Error("Witness validation failed during chain insertion", "blockNumber", block.Number(), "blockHash", block.Hash(), "err", err)
+				bc.reportBlock(block, &ProcessResult{}, err)
+				followupInterrupt.Store(true)
+				return nil, it.index, fmt.Errorf("witness validation failed: %w", err)
+			}
+
+			// 2. Set the witness to the statedb.
 			memdb := witnesses[it.processed()-1].MakeHashDB(bc.statedb.TrieDB().Disk())
 			bc.statedb.TrieDB().SetReadBackend(hashdb.New(memdb, triedb.HashDefaults.HashDB))
 			computeWitness = false
@@ -2685,7 +2694,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		if computeWitness {
 			witness, err = stateless.NewWitness(block.Header(), bc)
 			if err != nil {
-				log.Error("error in witness generation", "caughterr", err)
+				log.Error("Error in witness generation", "err", err)
 			}
 		}
 
@@ -2697,7 +2706,6 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		if err != nil {
 			bc.reportBlock(block, &ProcessResult{Receipts: receipts}, err)
 			followupInterrupt.Store(true)
-
 			return nil, it.index, err
 		}
 
@@ -3631,6 +3639,13 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 	if witness == nil {
 		return nil, errors.New("nil witness")
 	}
+
+	// Validate witness.
+	if err := stateless.ValidateWitnessPreState(witness, bc); err != nil {
+		log.Error("Witness validation failed during stateless processing", "blockNumber", block.Number(), "blockHash", block.Hash(), "err", err)
+		return nil, fmt.Errorf("witness validation failed: %w", err)
+	}
+
 	// Remove critical computed fields from the block to force true recalculation
 	context := block.Header()
 	context.Root = common.Hash{}

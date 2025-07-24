@@ -3606,6 +3606,20 @@ func (bc *BlockChain) InsertHeaderChain(chain []*types.Header) (int, error) {
 	return 0, err
 }
 
+func (bc *BlockChain) InsertHeaderChainWithoutValidation(chain []*types.Header) (int, error) {
+	if len(chain) == 0 {
+		return 0, nil
+	}
+
+	if !bc.chainmu.TryLock() {
+		return 0, errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+
+	count, err := bc.hc.WriteHeaders(chain)
+	return count, err
+}
+
 func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 	return bc.chainConfig
 }

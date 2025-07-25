@@ -586,19 +586,22 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	// threshold (i.e. new chain). In that case we won't really fast sync
 	// anyway, but still need a valid pivot block to avoid some code hitting
 	// nil panics on access.
-	if mode == SnapSync && pivot == nil {
+	if (mode == SnapSync || mode == StatelessSync) && pivot == nil {
 		pivot = d.blockchain.CurrentBlock()
 	}
 
 	height := latest.Number.Uint64()
 
 	var origin uint64
+	var needsBytecodeSync bool
 	if mode == StatelessSync {
+		d.SnapSyncer.SetBytecodeOnlyMode(true)
 		// Get the fast forward block first
 		fastForwardBlock := d.GetOrWaitFastForwardBlock(fastForwardTimeout)
 
 		// Check if we need to download bytecodes before starting stateless sync
-		if d.needsBytecodeSync(fastForwardBlock) {
+		needsBytecodeSync = d.needsBytecodeSync(fastForwardBlock)
+		if needsBytecodeSync {
 			log.Info("Starting bytecode-only snap sync before stateless sync", "fastForwardBlock", fastForwardBlock)
 
 			// We need the header at fastForwardBlock as the pivot for bytecode sync
@@ -609,16 +612,9 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 					"fastForwardBlock", fastForwardBlock, "err", err)
 				// Fallback to latest if we can't get the specific block
 				headers = []*types.Header{latest}
+				fastForwardBlock = latest.Number.Uint64()
 			}
 			pivotHeader := headers[0]
-
-			// Run bytecode-only snap sync
-			if err := d.runBytecodeOnlySnapSync(p, pivotHeader); err != nil {
-				log.Error("Bytecode-only snap sync failed", "err", err)
-				return fmt.Errorf("bytecode-only snap sync failed: %w", err)
-			}
-
-			log.Info("Bytecode-only snap sync completed, continuing with stateless sync")
 
 			if !d.blockchain.HasHeader(pivotHeader.Hash(), pivotHeader.Number.Uint64()) {
 				log.Info("Pivot header not found in local chain, inserting", "pivotHeader", pivotHeader.Number, "hash", pivotHeader.Hash())
@@ -626,6 +622,13 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 				if err != nil {
 					return fmt.Errorf("failed to insert pivot header into local chain: %w", err)
 				}
+			}
+
+			pivot = pivotHeader
+		} else {
+			lastSyncedByteCodeBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
+			if fastForwardBlock > lastSyncedByteCodeBlock && lastSyncedByteCodeBlock != 0 {
+				fastForwardBlock = lastSyncedByteCodeBlock
 			}
 		}
 
@@ -668,7 +671,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	}
 
 	d.committed.Store(true)
-	if mode == SnapSync && pivot.Number.Uint64() != 0 {
+	if (mode == SnapSync || needsBytecodeSync) && pivot.Number.Uint64() != 0 {
 		d.committed.Store(false)
 	}
 	if mode == SnapSync {
@@ -758,15 +761,43 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		d.pivotHeader = pivot
 		d.pivotLock.Unlock()
 
-		fetchers = append(fetchers, func() error { return d.processSnapSyncContent() })
+		fetchers = append(fetchers, func() error { return d.processSnapSyncContent(true) })
 	} else if mode == FullSync {
 		fetchers = append(fetchers, func() error { return d.processFullSyncContent(ttd, beaconMode) })
-	} else if mode == StatelessSync {
-		// For stateless sync, we use our specialized processFullSyncContentStateless function
-		fetchers = append(fetchers, func() error { return d.processFullSyncContentStateless() })
 	}
 
-	return d.spawnSync(fetchers)
+	if mode != StatelessSync {
+		return d.spawnSync(fetchers)
+	}
+
+	if needsBytecodeSync {
+		d.pivotLock.Lock()
+		d.pivotHeader = pivot
+		d.pivotLock.Unlock()
+
+		err := d.spawnSyncDominant(fetchers, func() error { return d.processSnapSyncContent(false) })
+		if err != nil {
+			return err
+		}
+
+		// Ensure snap syncer is fully terminated before proceeding
+		d.Cancel()
+		d.cancelWg.Wait()
+
+		batch := d.stateDB.NewBatch()
+		rawdb.WriteBytecodeSyncLastBlock(batch, origin)
+		if err := batch.Write(); err != nil {
+			return err
+		}
+
+		log.Info("Bytecode sync completed", "block", origin)
+		return nil
+	} else {
+		log.Info("Starting stateless sync from block", "block", origin)
+		fetchers = append(fetchers, func() error { return d.processFullSyncContentStateless() })
+		d.committed.Store(true)
+		return d.spawnSync(fetchers)
+	}
 }
 
 // spawnSync runs d.process and all given fetcher functions to completion in
@@ -795,6 +826,56 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 			}
 		}
 	}
+	d.queue.Close()
+	d.Cancel()
+
+	return err
+}
+
+// spawnSyncDominant runs d.process and all given fetcher functions to completion in
+// separate goroutines, but cancels all fetchers as soon as the dominantFetcher completes,
+// regardless of whether it returns an error or not.
+func (d *Downloader) spawnSyncDominant(fetchers []func() error, dominantFetcher func() error) error {
+	totalFetchers := len(fetchers) + 1
+	errc := make(chan error, totalFetchers)
+	d.cancelWg.Add(totalFetchers)
+
+	dominantFetcherDone := make(chan struct{})
+
+	// Start the dominant fetcher
+	go func() {
+		defer d.cancelWg.Done()
+		defer close(dominantFetcherDone)
+		errc <- dominantFetcher()
+	}()
+
+	// Start all regular fetchers
+	for _, fn := range fetchers {
+		fn := fn // capture loop variable
+		go func() {
+			defer d.cancelWg.Done()
+			errc <- fn()
+		}()
+	}
+
+	var err error
+	completed := 0
+
+	// Wait for either dominant fetcher completion or any error
+	for completed < totalFetchers {
+		select {
+		case <-dominantFetcherDone:
+			// Dominant fetcher completed, cancel all others immediately
+			d.Cancel()
+			// Continue to collect remaining errors/completions
+		case got := <-errc:
+			completed++
+			if got != nil && err == nil && got != errCanceled {
+				err = got
+			}
+		}
+	}
+
 	d.queue.Close()
 	d.Cancel()
 
@@ -1742,7 +1823,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 
 // processSnapSyncContent takes fetch results from the queue and writes them to the
 // database. It also controls the synchronisation of state nodes of the pivot block.
-func (d *Downloader) processSnapSyncContent() error {
+func (d *Downloader) processSnapSyncContent(processResults bool) error {
 	// Start syncing state of the reported head block. This should get us most of
 	// the state of the pivot block.
 	d.pivotLock.RLock()
@@ -1838,7 +1919,14 @@ func (d *Downloader) processSnapSyncContent() error {
 			// late and will drop peers due to unavailable state!!!
 			if height := latest.Number.Uint64(); height >= pivot.Number.Uint64()+2*uint64(fsMinFullBlocks)-uint64(reorgProtHeaderDelay) {
 				log.Warn("Pivot became stale, moving", "old", pivot.Number.Uint64(), "new", height-uint64(fsMinFullBlocks)+uint64(reorgProtHeaderDelay))
-				pivot = results[len(results)-1-fsMinFullBlocks+reorgProtHeaderDelay].Header // must exist as lower old pivot is uncommitted
+
+				newPivotNum := len(results) - 1 - fsMinFullBlocks + reorgProtHeaderDelay
+
+				if newPivotNum < 0 || newPivotNum > len(results)-1 {
+					newPivotNum = len(results) - 1
+				}
+
+				pivot = results[newPivotNum].Header // must exist as lower old pivot is uncommitted
 
 				d.pivotLock.Lock()
 				d.pivotHeader = pivot
@@ -1851,8 +1939,11 @@ func (d *Downloader) processSnapSyncContent() error {
 		}
 
 		P, beforeP, afterP := splitAroundPivot(pivot.Number.Uint64(), results)
-		if err := d.commitSnapSyncData(beforeP, sync); err != nil {
-			return err
+
+		if processResults {
+			if err := d.commitSnapSyncData(beforeP, sync); err != nil {
+				return err
+			}
 		}
 
 		if P != nil {
@@ -1872,8 +1963,10 @@ func (d *Downloader) processSnapSyncContent() error {
 					return sync.err
 				}
 
-				if err := d.commitPivotBlock(P); err != nil {
-					return err
+				if processResults {
+					if err := d.commitPivotBlock(P); err != nil {
+						return err
+					}
 				}
 
 				oldPivot = nil
@@ -1883,9 +1976,24 @@ func (d *Downloader) processSnapSyncContent() error {
 				continue
 			}
 		}
-		// Fast sync done, pivot commit done, full import
-		if err := d.importBlockResults(afterP); err != nil {
-			return err
+
+		if processResults {
+			// Fast sync done, pivot commit done, full import
+			if err := d.importBlockResults(afterP); err != nil {
+				return err
+			}
+		} else {
+			select {
+			case <-sync.done:
+				if sync.err != nil {
+					return sync.err
+				}
+				d.committed.Store(true)
+				return nil
+
+			case <-time.After(time.Second):
+				continue
+			}
 		}
 	}
 }
@@ -2164,17 +2272,6 @@ func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
 		return errInvalidBody // Or a more specific error if possible
 	}
 
-	// Update bytecode sync last block to prevent re-triggering bytecode sync
-	// during active stateless sync when the fast forward block advances
-	if len(blocks) > 0 {
-		lastBlock := blocks[len(blocks)-1].NumberU64()
-		currentBytecodeSyncBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
-		if lastBlock > currentBytecodeSyncBlock {
-			rawdb.WriteBytecodeSyncLastBlock(d.stateDB, lastBlock)
-			log.Debug("Updated bytecode sync last block during stateless sync", "block", lastBlock)
-		}
-	}
-
 	return nil
 }
 
@@ -2328,10 +2425,10 @@ func (d *Downloader) needsBytecodeSync(fastForwardBlock uint64) bool {
 	}
 
 	// Read the last synced block from the database
-	lastSyncedBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
+	lastSyncedByteCodeBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
 
 	// If we haven't synced any bytecodes yet and gap is significant, we need to sync
-	if lastSyncedBlock == 0 {
+	if lastSyncedByteCodeBlock == 0 {
 		log.Info("Bytecode sync needed: no previous sync found",
 			"fastForwardBlock", fastForwardBlock, "currentBlock", currentBlock,
 			"gap", gap, "threshold", d.FastForwardThreshold)
@@ -2339,15 +2436,16 @@ func (d *Downloader) needsBytecodeSync(fastForwardBlock uint64) bool {
 	}
 
 	// If the fast forward block has moved beyond our last sync, we need to sync
-	if lastSyncedBlock < fastForwardBlock {
+	gap = int64(fastForwardBlock) - int64(lastSyncedByteCodeBlock)
+	if gap > int64(d.FastForwardThreshold) {
 		log.Info("Bytecode sync needed: fast forward block moved",
-			"lastSyncedBlock", lastSyncedBlock, "fastForwardBlock", fastForwardBlock,
+			"lastSyncedByteCodeBlock", lastSyncedByteCodeBlock, "fastForwardBlock", fastForwardBlock,
 			"currentBlock", currentBlock, "gap", gap)
 		return true
 	}
 
 	// Bytecode sync is already complete up to or beyond the fast forward block
-	log.Debug("Bytecode sync not needed", "lastSyncedBlock", lastSyncedBlock, "fastForwardBlock", fastForwardBlock)
+	log.Info("Bytecode sync not needed", "lastSyncedByteCodeBlock", lastSyncedByteCodeBlock, "fastForwardBlock", fastForwardBlock)
 	return false
 }
 

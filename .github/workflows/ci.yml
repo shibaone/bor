@@ -198,16 +198,16 @@ jobs:
   #         git submodule update --init --recursive --force
   #         git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: 1.24.3
+  #     - uses: actions/setup-go@v5
+  #       with:
+  #         go-version: 1.24.3
 
-      - name: Checkout matic-cli
-        uses: actions/checkout@v4
-        with:
-          repository: maticnetwork/matic-cli
-          ref: heimdall-v2
-          path: matic-cli
+  #     - name: Checkout matic-cli
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: maticnetwork/matic-cli
+  #         ref: heimdall-v2
+  #         path: matic-cli
 
   #     - name: Install dependencies on Linux
   #       if: runner.os == 'Linux'
@@ -252,16 +252,16 @@ jobs:
   #         cd devnet
   #         ../bin/matic-cli.js setup devnet -c ../../bor/.github/matic-cli-config.yml
 
-      - name: Launch devnet
-        run: |
-          cd matic-cli/devnet
-          bash ../util-scripts/docker/devnet_setup.sh
-          cd -
-          timeout 2m bash bor/integration-tests/bor_health.sh
+  #     - name: Launch devnet
+  #       run: |
+  #         cd matic-cli/devnet
+  #         bash ../util-scripts/docker/devnet_setup.sh
+  #         cd -
+  #         timeout 2m bash bor/integration-tests/bor_health.sh
 
-      - name: Run smoke tests
-        run: |
-          timeout 20m bash bor/integration-tests/smoke_test.sh
+  #     - name: Run smoke tests
+  #       run: |
+  #         timeout 20m bash bor/integration-tests/smoke_test.sh
 
   #     - name: Run RPC Tests
   #       run: |

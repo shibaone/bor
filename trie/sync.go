@@ -45,6 +45,8 @@ var ErrAlreadyProcessed = errors.New("already processed")
 // memory if the node was configured with a significant number of peers.
 const maxFetchesPerDepth = 16384
 
+const maxDepthStoredForBytecodeOnlySync = 6
+
 var (
 	// deletionGauge is the metric to track how many trie node deletions
 	// are performed in total during the sync process.
@@ -65,12 +67,6 @@ var (
 	// codeSyncedGauge is the metric to track how many contract codes are
 	// written during the sync.
 	codeSyncedGauge = metrics.NewRegisteredGauge("trie/sync/codes", nil)
-
-	// bytecodePathNodesGauge tracks nodes stored due to leading to bytecode
-	bytecodePathNodesGauge = metrics.NewRegisteredGauge("trie/sync/nodes/bytecodepath", nil)
-
-	// skippedNodesGauge tracks nodes skipped in bytecode-only mode
-	skippedNodesGauge = metrics.NewRegisteredGauge("trie/sync/nodes/skipped", nil)
 )
 
 // SyncPath is a path tuple identifying a particular trie node either in a single
@@ -723,18 +719,11 @@ func (s *Sync) commitNodeRequest(req *nodeRequest) error {
 		depth := len(req.path) / 2 // Each byte represents 2 nibbles
 
 		// Always store top-level nodes for efficient traversal
-		shouldStore := depth <= 6 || req.leadsToCode
+		shouldStore := depth <= maxDepthStoredForBytecodeOnlySync || req.leadsToCode
 
 		if shouldStore {
 			owner, path := ResolvePath(req.path)
 			s.membatch.addNode(owner, path, req.data, req.hash)
-
-			if req.leadsToCode && depth > 6 {
-				log.Trace("Storing trie node on bytecode path", "depth", depth, "path", req.path)
-				bytecodePathNodesGauge.Inc(1)
-			}
-		} else {
-			skippedNodesGauge.Inc(1)
 		}
 
 		// If this node leads to code, propagate to parent

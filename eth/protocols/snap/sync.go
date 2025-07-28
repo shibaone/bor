@@ -637,16 +637,6 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 	// Retrieve the previous sync status from LevelDB and abort if already synced
 	s.loadSyncStatus()
 
-	// In bytecode-only mode, we always need to do a fresh scan for new contracts
-	// if s.bytecodeOnlyMode {
-	// 	// Clear any existing tasks and force a fresh scan
-	// 	s.lock.Lock()
-	// 	s.tasks = nil
-	// 	s.snapped = false
-	// 	s.lock.Unlock()
-	// 	// Create fresh tasks for scanning
-	// 	s.loadSyncStatus()
-	// } else
 	if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 		log.Debug("Snapshot sync already completed")
 		return nil

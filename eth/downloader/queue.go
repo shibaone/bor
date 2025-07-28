@@ -201,6 +201,9 @@ func newQueue(blockCacheLimit int, thresholdInitialSize int) *queue {
 		thresholdInitialSize: thresholdInitialSize,
 	}
 
+	// Initialize the queue by calling Reset
+	q.Reset(blockCacheLimit, thresholdInitialSize)
+
 	return q
 }
 

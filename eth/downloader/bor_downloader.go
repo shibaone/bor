@@ -1129,6 +1129,11 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 // without skipping any blocks. This is necessary for stateless nodes which may have gaps
 // in their locally stored blocks.
 func (d *Downloader) findAncestorStatelessSearch(p *peerConnection, remoteHeight uint64, floor int64) (uint64, error) {
+	// If the remote height is 0, we are at the genesis block, so we can return 0
+	if remoteHeight == 0 {
+		return 0, nil
+	}
+
 	currentHeight := int64(remoteHeight)
 
 	// Keep fetching headers backwards until we find an ancestor or reach the floor

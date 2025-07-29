@@ -597,22 +597,22 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	if mode == StatelessSync {
 		d.SnapSyncer.SetBytecodeOnlyMode(true)
 		// Get the fast forward block first
-		fastForwardBlock := d.GetOrWaitFastForwardBlock(fastForwardTimeout)
+		startBlock := d.GetOrWaitFastForwardBlock(fastForwardTimeout)
 
 		// Check if we need to download bytecodes before starting stateless sync
-		needsBytecodeSync = d.needsBytecodeSync(fastForwardBlock)
+		needsBytecodeSync = d.needsBytecodeSync(startBlock)
 		if needsBytecodeSync {
-			log.Info("Starting bytecode-only snap sync before stateless sync", "fastForwardBlock", fastForwardBlock)
+			log.Info("Starting bytecode-only snap sync before stateless sync", "startBlock", startBlock)
 
 			// We need the header at fastForwardBlock as the pivot for bytecode sync
 			// Request it from the peer since we might not have it locally
-			headers, _, err := d.fetchHeadersByNumber(p, fastForwardBlock, 1, 0, false)
+			headers, _, err := d.fetchHeadersByNumber(p, startBlock, 1, 0, false)
 			if err != nil || len(headers) == 0 {
 				log.Warn("Failed to fetch fastForwardBlock header, using latest as fallback",
-					"fastForwardBlock", fastForwardBlock, "err", err)
+					"fastForwardBlock", startBlock, "err", err)
 				// Fallback to latest if we can't get the specific block
 				headers = []*types.Header{latest}
-				fastForwardBlock = latest.Number.Uint64()
+				startBlock = latest.Number.Uint64()
 			}
 			pivotHeader := headers[0]
 
@@ -627,12 +627,28 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 			pivot = pivotHeader
 		} else {
 			lastSyncedByteCodeBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
-			if fastForwardBlock > lastSyncedByteCodeBlock && lastSyncedByteCodeBlock != 0 {
-				fastForwardBlock = lastSyncedByteCodeBlock
+			if startBlock > lastSyncedByteCodeBlock && lastSyncedByteCodeBlock != 0 {
+				startBlock = lastSyncedByteCodeBlock
+			}
+
+			// Use shorter chain for ancestor search
+			if latest.Number.Uint64() > startBlock {
+				origin, err = d.findAncestorStatelessSearch(p, startBlock, 0)
+			} else {
+				origin, err = d.findAncestorStatelessSearch(p, latest.Number.Uint64(), 0)
+			}
+
+			if err != nil {
+				return err
+			}
+
+			// If the origin is less than the start block, use the origin because it means we are possibly in a reorg
+			if origin < startBlock {
+				startBlock = origin
 			}
 		}
 
-		origin = fastForwardBlock
+		origin = startBlock
 	} else if !beaconMode {
 		// In legacy mode, reach out to the network and find the ancestor
 		origin, err = d.findAncestor(p, latest)
@@ -788,7 +804,6 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		log.Info("Bytecode sync completed", "block", origin)
 		return nil
 	} else {
-		log.Info("Starting stateless sync from block", "block", origin)
 		fetchers = append(fetchers, func() error { return d.processFullSyncContentStateless() })
 		d.committed.Store(true)
 		return d.spawnSync(fetchers)
@@ -1086,6 +1101,10 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 		floor = int64(localHeight - maxForkAncestry)
 	}
 
+	if mode == StatelessSync {
+		return d.findAncestorStatelessSearch(p, remoteHeight, floor)
+	}
+
 	ancestor, err := d.findAncestorSpanSearch(p, mode, remoteHeight, localHeight, floor)
 	if err == nil {
 		return ancestor, nil
@@ -1104,6 +1123,67 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 	}
 
 	return ancestor, nil
+}
+
+// findAncestorStatelessSearch searches for a common ancestor by fetching headers backwards
+// without skipping any blocks. This is necessary for stateless nodes which may have gaps
+// in their locally stored blocks.
+func (d *Downloader) findAncestorStatelessSearch(p *peerConnection, remoteHeight uint64, floor int64) (uint64, error) {
+	currentHeight := int64(remoteHeight)
+
+	// Keep fetching headers backwards until we find an ancestor or reach the floor
+	for currentHeight > floor {
+		// Calculate batch size
+		batchSize := MaxHeaderFetch
+		if currentHeight-floor < int64(batchSize) {
+			batchSize = int(currentHeight - floor)
+		}
+
+		// Calculate starting point for this batch
+		from := currentHeight - int64(batchSize) + 1
+		if from < floor {
+			from = floor
+		}
+
+		p.log.Trace("Stateless: fetching headers backwards", "from", from, "count", batchSize, "currentHeight", currentHeight)
+
+		// Fetch headers without skip (consecutive blocks)
+		headers, hashes, err := d.fetchHeadersByNumber(p, uint64(from), batchSize, 0, false)
+		if err != nil {
+			return 0, err
+		}
+
+		// Make sure the peer actually gave something valid
+		if len(headers) == 0 {
+			p.log.Warn("Empty head header set")
+			return 0, errEmptyHeaderSet
+		}
+
+		// Verify the headers are in order
+		for i, header := range headers {
+			expectNumber := from + int64(i)
+			if number := header.Number.Int64(); number != expectNumber {
+				p.log.Warn("Head headers broke chain ordering", "index", i, "requested", expectNumber, "received", number)
+				return 0, fmt.Errorf("%w: %v", errInvalidChain, errors.New("head headers broke chain ordering"))
+			}
+		}
+
+		// Check headers from highest to lowest
+		for i := len(headers) - 1; i >= 0; i-- {
+			h := hashes[i]
+			n := headers[i].Number.Uint64()
+
+			if d.blockchain.HasBlock(h, n) {
+				p.log.Debug("Found common ancestor", "number", n, "hash", h)
+				return n, nil
+			}
+		}
+
+		// Move to the next batch
+		currentHeight = from - 1
+	}
+
+	return 0, errNoAncestorFound
 }
 
 func (d *Downloader) findAncestorSpanSearch(p *peerConnection, mode SyncMode, remoteHeight, localHeight uint64, floor int64) (uint64, error) {
@@ -2411,7 +2491,7 @@ func (d *Downloader) needsBytecodeSync(fastForwardBlock uint64) bool {
 	// If so, we don't need bytecode sync regardless of previous sync state
 	gap := int64(fastForwardBlock) - int64(currentBlock)
 	if gap <= int64(d.FastForwardThreshold) {
-		log.Info("Bytecode sync skipped: gap less than FastForwardThreshold",
+		log.Debug("Bytecode sync skipped: gap less than FastForwardThreshold",
 			"currentBlock", currentBlock, "fastForwardBlock", fastForwardBlock,
 			"gap", gap, "threshold", d.FastForwardThreshold)
 		return false

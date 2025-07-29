@@ -782,13 +782,8 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 
 		// Ensure snap syncer is fully terminated before proceeding
 		d.Cancel()
-		d.cancelWg.Wait()
 
-		batch := d.stateDB.NewBatch()
-		rawdb.WriteBytecodeSyncLastBlock(batch, origin)
-		if err := batch.Write(); err != nil {
-			return err
-		}
+		rawdb.WriteBytecodeSyncLastBlock(d.stateDB, origin)
 
 		log.Info("Bytecode sync completed", "block", origin)
 		return nil
@@ -1917,13 +1912,13 @@ func (d *Downloader) processSnapSyncContent(processResults bool) error {
 			// need to be taken into account, otherwise we're detecting the pivot move
 			// late and will drop peers due to unavailable state!!!
 			if height := latest.Number.Uint64(); height >= pivot.Number.Uint64()+2*uint64(fsMinFullBlocks)-uint64(reorgProtHeaderDelay) {
-				log.Warn("Pivot became stale, moving", "old", pivot.Number.Uint64(), "new", height-uint64(fsMinFullBlocks)+uint64(reorgProtHeaderDelay))
-
 				newPivotNum := len(results) - 1 - fsMinFullBlocks + reorgProtHeaderDelay
 
 				if newPivotNum < 0 || newPivotNum > len(results)-1 {
 					newPivotNum = len(results) - 1
 				}
+
+				log.Warn("Pivot became stale, moving", "old", pivot.Number.Uint64(), "new", newPivotNum)
 
 				pivot = results[newPivotNum].Header // must exist as lower old pivot is uncommitted
 

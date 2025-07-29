@@ -1981,11 +1981,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		}
 	}
 
-	batch := bc.db.NewBatch()
-	rawdb.WriteBytecodeSyncLastBlock(batch, block.NumberU64())
-	if err := batch.Write(); err != nil {
-		log.Crit("Failed to write bytecode sync last block into disk", "err", err)
-	}
+	rawdb.WriteBytecodeSyncLastBlock(bc.db, block.NumberU64())
 
 	// If node is running in path mode, skip explicit gc operation
 	// which is unnecessary in this mode.

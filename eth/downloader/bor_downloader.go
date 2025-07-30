@@ -1181,7 +1181,7 @@ func (d *Downloader) findAncestorStatelessSearch(p *peerConnection, remoteHeight
 			h := hashes[i]
 			n := headers[i].Number.Uint64()
 
-			if d.blockchain.HasBlock(h, n) {
+			if d.blockchain.HasHeader(h, n) {
 				p.log.Debug("Found common ancestor", "number", n, "hash", h)
 				return n, nil
 			}

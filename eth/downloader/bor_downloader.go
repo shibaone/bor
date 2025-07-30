@@ -639,11 +639,8 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 			}
 
 			if err != nil {
-				return err
-			}
-
-			// If the origin is less than the start block, use the origin because it means we are possibly in a reorg
-			if origin < startBlock {
+				log.Info("Could not find common ancestor", "err", err)
+			} else if origin < startBlock {
 				startBlock = origin
 			}
 		}
@@ -745,7 +742,13 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		}
 	}
 	// Initiate the sync using a concurrent header and content retrieval algorithm
-	d.queue.Prepare(origin+1, mode)
+	// When doing bytecode sync in StatelessSync mode, use SnapSync for the queue
+	// to avoid expecting witnesses that won't be fetched
+	queueMode := mode
+	if mode == StatelessSync && needsBytecodeSync {
+		queueMode = SnapSync
+	}
+	d.queue.Prepare(origin+1, queueMode)
 
 	if d.syncInitHook != nil {
 		d.syncInitHook(origin, height)
@@ -768,7 +771,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	}
 
 	// Add witness fetcher if in FullSync or StatelessSync mode
-	if mode == StatelessSync {
+	if mode == StatelessSync && !needsBytecodeSync {
 		fetchers = append(fetchers, func() error { return d.fetchWitnesses(origin+1, beaconMode) })
 	}
 

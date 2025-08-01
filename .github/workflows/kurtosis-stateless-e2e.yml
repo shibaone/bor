@@ -19,8 +19,8 @@ env:
 jobs:
   e2e-tests:
     name: E2E Tests
-    runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Bor

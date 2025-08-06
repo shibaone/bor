@@ -945,10 +945,10 @@ func (d *dynamicHeimdallClient) FetchMilestoneID(ctx context.Context, milestoneI
 }
 func (d *dynamicHeimdallClient) Close() {}
 
-func makeTestSpan(id, start, end uint64, producerAddr common.Address) *types.Span {
+func makeTestSpan(id, start, end uint64, producerAddr string) *types.Span {
 	producer := stakeTypes.Validator{
 		ValId:            id,
-		Signer:           producerAddr.Hex(),
+		Signer:           producerAddr,
 		VotingPower:      100,
 		ProposerPriority: 0,
 	}
@@ -965,8 +965,9 @@ func makeTestSpan(id, start, end uint64, producerAddr common.Address) *types.Spa
 }
 
 func TestSpanStore_WaitForNewSpan(t *testing.T) {
-	author1 := common.HexToAddress("0xaaaa")
-	author2 := common.HexToAddress("0xbbbb")
+	author1 := "97538585a02A3f1B1297EB9979cE1b34ff953f1E"
+	author2 := "eeE6f79486542f85290920073947bc9672C6ACE5"
+	author1Address := common.HexToAddress(author1)
 	span0 := makeTestSpan(0, 0, 99, author1)
 
 	t.Run("success on first try", func(t *testing.T) {
@@ -977,7 +978,7 @@ func TestSpanStore_WaitForNewSpan(t *testing.T) {
 		store := NewSpanStore(client, nil, "1337")
 		defer store.Close()
 
-		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		found, err := store.waitForNewSpan(150, author1Address, 1*time.Second)
 		require.NoError(t, err)
 		require.True(t, found)
 	})
@@ -996,7 +997,7 @@ func TestSpanStore_WaitForNewSpan(t *testing.T) {
 			client.setSpans(map[uint64]*types.Span{0: span0, 1: span1, 2: span2}, span2)
 		}()
 
-		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		found, err := store.waitForNewSpan(150, author1Address, 1*time.Second)
 		require.NoError(t, err)
 		require.True(t, found)
 	})
@@ -1010,7 +1011,7 @@ func TestSpanStore_WaitForNewSpan(t *testing.T) {
 		defer store.Close()
 
 		// Use a short timeout to ensure the test doesn't run for too long
-		found, err := store.waitForNewSpan(150, author1, 250*time.Millisecond)
+		found, err := store.waitForNewSpan(150, author1Address, 250*time.Millisecond)
 		require.NoError(t, err)
 		require.False(t, found)
 	})
@@ -1023,7 +1024,7 @@ func TestSpanStore_WaitForNewSpan(t *testing.T) {
 		store := NewSpanStore(client, nil, "1337")
 		defer store.Close()
 
-		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		found, err := store.waitForNewSpan(150, author1Address, 1*time.Second)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), expectedErr.Error())
 		require.False(t, found)
@@ -1044,7 +1045,7 @@ func TestSpanStore_WaitForNewSpan(t *testing.T) {
 			client.setSpans(map[uint64]*types.Span{0: span0, 1: span1, 2: span2}, span2)
 		}()
 
-		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		found, err := store.waitForNewSpan(150, author1Address, 1*time.Second)
 		require.NoError(t, err)
 		require.True(t, found)
 	})
@@ -1063,7 +1064,7 @@ func TestSpanStore_WaitForNewSpan(t *testing.T) {
 			client.setSpans(map[uint64]*types.Span{0: span0, 1: span1, 2: span2}, span2)
 		}()
 
-		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		found, err := store.waitForNewSpan(150, author1Address, 1*time.Second)
 		require.NoError(t, err)
 		require.True(t, found)
 	})

@@ -340,7 +340,7 @@ func (s *SpanStore) waitForNewSpan(targetBlockNumber uint64, currentHeaderAuthor
 
 	for {
 		if currentSpan.StartBlock <= targetBlockNumber && currentSpan.EndBlock >= targetBlockNumber {
-			if len(currentSpan.SelectedProducers) > 0 && currentSpan.SelectedProducers[0].Signer != currentHeaderAuthor.Hex() {
+			if len(currentSpan.SelectedProducers) > 0 && common.HexToAddress(currentSpan.SelectedProducers[0].Signer) != currentHeaderAuthor {
 				return true, nil
 			}
 		}

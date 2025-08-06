@@ -116,7 +116,7 @@ echo "=== Test 1: Checking all the nodes reach block $TARGET_BLOCK and have the 
 
 SECONDS=0
 start_time=$SECONDS
-TARGET_BLOCK=383
+TARGET_BLOCK=380
 
 while true; do
 	current_time=$SECONDS

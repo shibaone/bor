@@ -192,6 +192,12 @@ func CalcProducerDelay(number uint64, succession int, c *params.BorConfig) uint6
 	// When the block is the first block of the sprint, it is expected to be delayed by `producerDelay`.
 	// That is to allow time for block propagation in the last sprint
 	delay := c.CalculatePeriod(number)
+
+	// Since there is only one producer in veblop, we don't need to add producer delay and backup multiplier
+	if c.IsVeBlop(big.NewInt(int64(number))) {
+		return delay
+	}
+
 	if number%c.CalculateSprint(number) == 0 {
 		delay = c.CalculateProducerDelay(number)
 	}

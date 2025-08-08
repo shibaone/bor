@@ -352,48 +352,54 @@ test_sync_recovery() {
     local test_name="$1"
     local timeout_seconds=${2:-300}  # 5 minutes default
     local min_block_progress=${3:-5}  # Minimum blocks to consider recovery successful
-    
+    local max_milestone_lag=${4:-3}   # Max allowed lag between tip and milestone
+
     echo "Testing sync recovery for $test_name..."
-    echo "Waiting up to ${timeout_seconds}s for at least ${min_block_progress} new blocks and finalized blocks"
-    
+    echo "Waiting up to ${timeout_seconds}s for at least ${min_block_progress} new blocks and finalized blocks, and milestone lag <= ${max_milestone_lag}"
+
     # Get initial block numbers from all stateless services
     local initial_blocks=()
     local initial_finalized_blocks=()
     STATELESS_SERVICES=("${STATELESS_SYNC_VALIDATORS[@]}" "${STATELESS_RPC_SERVICES[@]}")
-    
+
     # Use first validator for finalized block checks
     REPRESENTATIVE_SERVICE=${STATELESS_SYNC_VALIDATORS[0]}
     initial_finalized=$(get_finalized_block "$REPRESENTATIVE_SERVICE")
-    
+
     for service in "${STATELESS_SERVICES[@]}"; do
         initial_block=$(get_block_number "$service")
         if [[ "$initial_block" =~ ^[0-9]+$ ]]; then
             initial_blocks+=("$service:$initial_block")
         fi
     done
-    
+
     echo "Initial block numbers:"
     for entry in "${initial_blocks[@]}"; do
         echo "  $entry"
     done
     echo "Initial finalized block: $initial_finalized"
-    
+
     local start_time=$SECONDS
     local recovery_confirmed=false
-    
+
     while [ $((SECONDS - start_time)) -lt $timeout_seconds ]; do
         local all_progressed=true
         local progress_details=()
-        
-        # Check regular block progress
+        local max_current_block=0
+
+        # Check regular block progress and compute current tip
         for entry in "${initial_blocks[@]}"; do
             IFS=':' read -r service initial_block <<< "$entry"
             current_block=$(get_block_number "$service")
-            
+
             if [[ "$current_block" =~ ^[0-9]+$ ]]; then
                 progress=$((current_block - initial_block))
                 progress_details+=("$service: $initial_block → $current_block (+$progress)")
-                
+
+                if [ $current_block -gt $max_current_block ]; then
+                    max_current_block=$current_block
+                fi
+
                 if [ $progress -lt $min_block_progress ]; then
                     all_progressed=false
                 fi
@@ -402,13 +408,13 @@ test_sync_recovery() {
                 all_progressed=false
             fi
         done
-        
+
         # Check finalized block progress
         current_finalized=$(get_finalized_block "$REPRESENTATIVE_SERVICE")
         if [[ "$current_finalized" =~ ^[0-9]+$ ]] && [[ "$initial_finalized" =~ ^[0-9]+$ ]]; then
             finalized_progress=$((current_finalized - initial_finalized))
             progress_details+=("FINALIZED: $initial_finalized → $current_finalized (+$finalized_progress)")
-            
+
             if [ $finalized_progress -lt $min_block_progress ]; then
                 all_progressed=false
             fi
@@ -416,28 +422,37 @@ test_sync_recovery() {
             progress_details+=("FINALIZED: ERROR (unable to get finalized block)")
             all_progressed=false
         fi
-        
+
+        # Ensure milestone is caught up to tip within allowable lag
+        if [[ "$current_finalized" =~ ^[0-9]+$ ]] && [ "$max_current_block" -gt 0 ]; then
+            milestone_lag=$((max_current_block - current_finalized))
+            progress_details+=("MILESTONE LAG: tip=$max_current_block, finalized=$current_finalized (lag=$milestone_lag)")
+            if [ $milestone_lag -gt $max_milestone_lag ]; then
+                all_progressed=false
+            fi
+        fi
+
         elapsed=$((SECONDS - start_time))
         echo "Recovery progress at ${elapsed}s:"
         for detail in "${progress_details[@]}"; do
             echo "  $detail"
         done
-        
+
         if [ "$all_progressed" = true ]; then
-            echo "✅ All services have progressed at least $min_block_progress blocks (including finalized blocks)"
+            echo "✅ All services progressed ≥ $min_block_progress, finalized progressed ≥ $min_block_progress, and milestone lag ≤ $max_milestone_lag"
             recovery_confirmed=true
             break
         fi
-        
+
         echo "Waiting for more block progress..."
         sleep 10
     done
-    
+
     if [ "$recovery_confirmed" = true ]; then
         echo "✅ Sync recovery test passed for $test_name"
         return 0
     else
-        echo "❌ Sync recovery test failed for $test_name - insufficient block progress within ${timeout_seconds}s"
+        echo "❌ Sync recovery test failed for $test_name - insufficient progress or excessive milestone lag within ${timeout_seconds}s"
         return 1
     fi
 }

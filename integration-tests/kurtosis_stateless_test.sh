@@ -288,7 +288,6 @@ test_extreme_network_latency_recovery() {
 	echo "✅ Extreme network latency recovery test passed - nodes successfully recovered and resumed block generation"
 }
 
-
 # Test 6: Block producer rotation test
 test_block_producer_rotation() {
 	echo ""
@@ -306,11 +305,11 @@ test_block_producer_rotation() {
 	for rotation_round in {1..3}; do
 		echo ""
 		echo "--- Rotation round $rotation_round/3 ---"
-		
+
 		# Run the rotation script
 		echo "Running block producer rotation script (15 seconds)..."
 		"$SCRIPT_DIR/rotate_current_block_producer.sh"
-		
+
 		echo "Rotation script completed. Waiting 15 seconds before next round..."
 		sleep 15
 	done
@@ -339,7 +338,7 @@ test_block_producer_rotation() {
 	if [[ "$initial_reorg_count" =~ ^[0-9]+$ ]] && [[ "$final_reorg_count" =~ ^[0-9]+$ ]]; then
 		reorg_diff=$((final_reorg_count - initial_reorg_count))
 		echo "Reorg count difference: $reorg_diff"
-		
+
 		if [ "$reorg_diff" -eq 0 ]; then
 			echo "✅ No reorgs detected on stateless node 7 during block producer rotation"
 		else
@@ -354,13 +353,11 @@ test_block_producer_rotation() {
 	echo "✅ Block producer rotation test passed - authors rotated successfully with no reorgs on stateless nodes"
 }
 
-
-
 # Test 7: Load test with polycli
 test_polycli_load_test() {
 	echo ""
 	echo "=== Test 7: Load test with polycli ==="
-	
+
 	polycli_bin=$(which polycli)
 	first_rpc_service="${STATELESS_RPC_SERVICES[0]}"
 	first_rpc_url=$(get_rpc_url "$first_rpc_service")
@@ -373,7 +370,7 @@ test_polycli_load_test() {
 	echo "Initial nonce for account $test_account: $initial_nonce"
 
 	# Run load test
-	$polycli_bin loadtest --rpc-url "$first_rpc_url" --private-key "0x2a4ae8c4c250917781d38d95dafbb0abe87ae2c9aea02ed7c7524685358e49c2" --verbosity 500 --requests $num_txs --rate-limit 500  --mode uniswapv3 --gas-price 35000000000
+	$polycli_bin loadtest --rpc-url "$first_rpc_url" --private-key "0x2a4ae8c4c250917781d38d95dafbb0abe87ae2c9aea02ed7c7524685358e49c2" --verbosity 500 --requests $num_txs --rate-limit 500 --mode uniswapv3 --gas-price 35000000000
 
 	# Check final nonce after load test
 	final_nonce=$(cast nonce "$test_account" --rpc-url "$first_rpc_url")
@@ -383,7 +380,7 @@ test_polycli_load_test() {
 	if [[ "$initial_nonce" =~ ^[0-9]+$ ]] && [[ "$final_nonce" =~ ^[0-9]+$ ]]; then
 		nonce_diff=$((final_nonce - initial_nonce))
 		echo "Transactions processed: $nonce_diff (nonce increased from $initial_nonce to $final_nonce)"
-		
+
 		if [ "$nonce_diff" -gt $num_txs ]; then
 			echo "✅ Load test successful - processed $nonce_diff transactions (> $num_txs)"
 		else

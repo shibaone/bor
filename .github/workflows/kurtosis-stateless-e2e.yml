@@ -87,7 +87,7 @@ jobs:
           bash integration-tests/kurtosis_stateless_test.sh
 
       - name: Test state syncs (post VeBlop HF)
-        run: kurtosis service exec ${{ env.ENCLAVE_NAME }} test-runner "bats --filter-tags pos,bridge,matic,pol --recursive tests/"
+        run: kurtosis service exec ${{ env.ENCLAVE_NAME }} test-runner "bats --filter-tags pos,bridge,l1,l2 --recursive tests/"
 
       - name: Post kurtosis run
         if: always()

@@ -1227,13 +1227,13 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	n.RPCTxFeeCap = c.JsonRPC.TxFeeCap
 
-	// sync mode. It can either be "full", "snap" or "stateless". We disable
-	// for now the "light" mode.
+	// Choose the sync mode. Only "full" or "stateless" sync is supported
 	switch c.SyncMode {
 	case "full":
 		n.SyncMode = downloader.FullSync
 	case "snap":
-		n.SyncMode = downloader.SnapSync
+		log.Info("Snap sync is momentarily disabled in bor, switching to full sync")
+		n.SyncMode = downloader.FullSync
 	case "stateless":
 		n.SyncMode = downloader.StatelessSync
 		log.Info("Using Stateless Sync mode - syncing from latest checkpoint without history")

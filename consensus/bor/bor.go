@@ -849,7 +849,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	number := header.Number.Uint64()
 	// Assemble the validator snapshot to check which votes make sense
-	snap, err := c.snapshot(chain, header, nil, true)
+	snap, err := c.snapshot(chain, header, nil, false)
 	if err != nil {
 		return err
 	}
@@ -1140,7 +1140,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, witnes
 	// Don't hold the signer fields for the entire sealing procedure
 	currentSigner := *c.authorizedSigner.Load()
 
-	snap, err := c.snapshot(chain, header, nil, true)
+	snap, err := c.snapshot(chain, header, nil, false)
 	if err != nil {
 		return err
 	}

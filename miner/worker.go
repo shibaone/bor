@@ -545,7 +545,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 		case <-veblopTimer.C:
 			currentBlock := w.chain.CurrentBlock()
-			if !w.chainConfig.Bor.IsVeBlop(currentBlock.Number) {
+			if w.chainConfig.Bor == nil || !w.chainConfig.Bor.IsVeBlop(currentBlock.Number) {
 				veblopTimer.Reset(veblopTimeout)
 				continue
 			}
@@ -1542,7 +1542,10 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	// If the block is a veblop block, we will never try to create a commit for an empty block.
-	isVeblop := w.chainConfig.Bor.IsVeBlop(work.header.Number)
+	var isVeblop bool
+	if w.chainConfig.Bor != nil {
+		isVeblop = w.chainConfig.Bor.IsVeBlop(work.header.Number)
+	}
 	if !noempty && !w.noempty.Load() && !isVeblop {
 		_ = w.commit(work.copy(), nil, false, start)
 	}

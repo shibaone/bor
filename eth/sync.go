@@ -168,6 +168,10 @@ func (cs *chainSyncer) nextSyncOp() *chainSyncOp {
 	mode, ourTD := cs.modeAndLocalHead()
 	op := peerToSyncOp(mode, peer)
 
+	if ourTD == nil {
+		ourTD = big.NewInt(0)
+	}
+
 	if op.td.Cmp(ourTD) <= 0 {
 		// We seem to be in sync according to the legacy rules. In the merge
 		// world, it can also mean we're stuck on the merge block, waiting for
@@ -191,16 +195,18 @@ func peerToSyncOp(mode downloader.SyncMode, p *eth.Peer) *chainSyncOp {
 
 func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 	// Enforce full or stateless sync as snap sync is disabled momentarily.
-	head := cs.handler.chain.CurrentBlock()
-	td := cs.handler.chain.GetTd(head.Hash(), head.Number.Uint64())
+	// Only exception is if we're in stateless sync mode.
+	if !cs.handler.statelessSync.Load() {
+		head := cs.handler.chain.CurrentBlock()
+		td := cs.handler.chain.GetTd(head.Hash(), head.Number.Uint64())
 
-	if cs.handler.statelessSync.Load() {
-		return downloader.StatelessSync, td
+		if cs.handler.statelessSync.Load() {
+			return downloader.StatelessSync, td
+		} else {
+			return downloader.FullSync, td
+		}
 	} else {
-		return downloader.FullSync, td
-	}
-	/*
-		// If we're in the snap sync mode, return that directly.
+		// If we're in snap sync mode, return that directly
 		if cs.handler.snapSync.Load() && !cs.handler.statelessSync.Load() {
 			block := cs.handler.chain.CurrentSnapBlock()
 			td := cs.handler.chain.GetTd(block.Hash(), block.Number.Uint64())
@@ -229,7 +235,7 @@ func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 			return downloader.SnapSync, td
 		}
 
-		// Nope, we're really full syncing.
+		// Nope, we're really full syncing
 		td := cs.handler.chain.GetTd(head.Hash(), head.Number.Uint64())
 
 		if cs.handler.statelessSync.Load() {
@@ -237,7 +243,7 @@ func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 		} else {
 			return downloader.FullSync, td
 		}
-	*/
+	}
 }
 
 // startSync launches doSync in a new goroutine.

@@ -48,7 +48,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-
 
       - name: Build
-        run: make bor
+        run: make all
 
   lint:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)

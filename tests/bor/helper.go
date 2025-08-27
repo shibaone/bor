@@ -374,7 +374,7 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 	copy(header.Extra[len(header.Extra)-extraSeal:], sig)
 }
 
-//nolint:unused,deadcode
+//nolint:unused
 func stateSyncEventsPayload(t *testing.T) []*clerk.EventRecordWithTime {
 	t.Helper()
 
@@ -391,7 +391,7 @@ func stateSyncEventsPayload(t *testing.T) []*clerk.EventRecordWithTime {
 	return res
 }
 
-//nolint:unused,deadcode
+//nolint:unused
 func loadSpanFromFile(t *testing.T) *borTypes.Span {
 	t.Helper()
 

@@ -246,7 +246,7 @@ type BlockChain interface {
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
-// nolint: staticcheck
+// nolint:staticcheck
 func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator, fastForwardThreshold uint64, syncAndProduceWitnesses bool) *Downloader {
 	if lightchain == nil {
 		lightchain = chain

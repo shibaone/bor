@@ -1362,7 +1362,7 @@ func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrErr
 
 	for _, a := range err.Matches {
 		if err := ks.Unlock(a, auth); err == nil {
-			// nolint: gosec, exportloopref
+			// nolint:gosec, exportloopref
 			match = &a
 			break
 		}
